@@ -133,7 +133,34 @@ pnpm start
 npm run start
 ```
 
-### Running with PM2 / Docker (Node Server)
+### Docker Deployment (GitHub Packages / GHCR)
+
+You can run the official pre-built multi-arch image directly from GitHub Container Registry:
+
+```bash
+docker run -d \
+  --name network-pulse \
+  --restart unless-stopped \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e DEFAULT_TARGET_NODE=speed.cloudflare.com \
+  -e ADMIN_PASSWORD=admin123 \
+  ghcr.io/aquamarine-z/network-speedtest:latest
+```
+
+### Docker Compose
+
+A preconfigured [docker-compose.yml](file:///l:/TypeScript%20Projects/network-speedtest/docker-compose.yml) is included in the root directory:
+
+```bash
+# Start container in background
+docker compose up -d
+
+# Or build locally from source
+docker compose up -d --build
+```
+
+### Running with PM2 (Node Server)
 
 To deploy as a long-running service with automated background inspections:
 
@@ -141,6 +168,7 @@ To deploy as a long-running service with automated background inspections:
 npm install -g pm2
 pm2 start npm --name "network-pulse" -- run start
 ```
+
 
 ---
 

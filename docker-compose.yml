@@ -1,0 +1,17 @@
+services:
+  network-pulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/aquamarine-z/network-speedtest:latest
+    container_name: network-pulse
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - DEFAULT_TARGET_NODE=speed.cloudflare.com
+      - ADMIN_PASSWORD=admin123
+    volumes:
+      - ./data:/app/data

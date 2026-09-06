@@ -1,0 +1,312 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", Monaco, Menlo, Consolas, monospace;
+
+  /* Apple Design Tokens */
+  --color-apple-blue: #0066cc;
+  --color-apple-blue-hover: #0071e3;
+  --color-apple-blue-dark: #2997ff;
+
+  --color-apple-green: #34c759;
+  --color-apple-orange: #ff9500;
+  --color-apple-red: #ff3b30;
+
+  --color-apple-light-bg: #f5f5f7;
+  --color-apple-light-card: #ffffff;
+  --color-apple-light-border: rgba(0, 0, 0, 0.08);
+  --color-apple-light-text: #1d1d1f;
+  --color-apple-light-subtext: #86868b;
+
+  --color-apple-dark-bg: #000000;
+  --color-apple-dark-card: #1c1c1e;
+  --color-apple-dark-card-elevated: #2c2c2e;
+  --color-apple-dark-border: rgba(255, 255, 255, 0.12);
+  --color-apple-dark-text: #f5f5f7;
+  --color-apple-dark-subtext: #86868b;
+}
+
+:root {
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0066cc;
+  --primary-foreground: #ffffff;
+  --secondary: #e5e5ea;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f2f2f7;
+  --muted-foreground: #86868b;
+  --accent: #e5e5ea;
+  --accent-foreground: #1d1d1f;
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.08);
+  --ring: #0066cc;
+  --radius: 1.125rem;
+}
+
+.dark {
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --card: #1c1c1e;
+  --card-foreground: #f5f5f7;
+  --popover: #1c1c1e;
+  --popover-foreground: #f5f5f7;
+  --primary: #2997ff;
+  --primary-foreground: #000000;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #1c1c1e;
+  --muted-foreground: #86868b;
+  --accent: #2c2c2e;
+  --accent-foreground: #f5f5f7;
+  --destructive: #ff453a;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #2997ff;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apple-style custom glassmorphism */
+.apple-glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .apple-glass {
+  background: rgba(28, 28, 30, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Subtle elevation according to Apple DESIGN.md */
+.apple-card-shadow {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
+.dark .apple-card-shadow {
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.35);
+}
+
+/* Radar pulse animation for map probes */
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.animate-radar {
+  animation: radar-pulse 2.2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+/* ==========================================================================
+   Apple-style Dialog & Overlay Animations (Opalus UI Surface Compatible)
+   ========================================================================== */
+
+@keyframes apple-overlay-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes apple-overlay-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes apple-dialog-in {
+  0% {
+    opacity: 0;
+    scale: 0.96;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes apple-dialog-out {
+  0% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+/* Dedicated CSS animation classes */
+.animate-apple-overlay-in {
+  animation: apple-overlay-in 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-apple-overlay-out {
+  animation: apple-overlay-out 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-apple-dialog-in {
+  animation: apple-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-apple-dialog-out {
+  animation: apple-dialog-out 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Automatic attribute selectors for Radix and Opalus UI Surface components */
+[data-slot="dialog-overlay"][data-state="open"] {
+  animation: apple-overlay-in 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+[data-slot="dialog-overlay"][data-state="closed"] {
+  animation: apple-overlay-out 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+[data-slot="dialog-content"] {
+  transform-origin: center;
+}
+
+[data-slot="dialog-content"][data-state="open"] {
+  animation: apple-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+[data-slot="dialog-content"][data-state="closed"] {
+  animation: apple-dialog-out 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ==========================================================================
+   Apple-style Minimal Scrollbars & Utilities
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Utility to completely hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* ==========================================================================
+   Color Picker (react-colorful) Styles
+   ========================================================================== */
+.react-colorful {
+  width: 100% !important;
+  height: 164px !important;
+  border-radius: 0.875rem !important;
+}
+
+.react-colorful__saturation {
+  width: 100% !important;
+  border-radius: 0.875rem 0.875rem 0 0 !important;
+  border-bottom: 10px solid #000 !important;
+}
+
+.react-colorful__hue {
+  width: 100% !important;
+  height: 14px !important;
+  border-radius: 0 0 0.875rem 0.875rem !important;
+}
+
+.react-colorful__pointer {
+  width: 18px !important;
+  height: 18px !important;
+  border: 2px solid #ffffff !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ==========================================================================
+   Apple HIG Smooth Accordion Expand/Collapse Animation
+   ========================================================================== */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+.accordion-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transition: grid-template-rows 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 220ms ease-out,
+              margin 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.accordion-grid[data-expanded="true"],
+.accordion-grid.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.accordion-grid-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-grid {
+    transition: none !important;
+  }
+}
+

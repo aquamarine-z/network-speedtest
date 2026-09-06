@@ -1,0 +1,20 @@
+name: Scheduled Network Quality Ping
+
+on:
+  schedule:
+    # 每 30 分钟定时执行一次 (可根据需要调整为任意频次)
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # 支持在 GitHub 仓库手动一键点击触发测试
+
+jobs:
+  ping-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Network Measurement Cron
+        run: |
+          if [ -n "${{ secrets.APP_URL }}" ]; then
+            echo "Triggering ping test on ${{ secrets.APP_URL }}..."
+            curl -sS -X POST "${{ secrets.APP_URL }}/api/cron?secret=${{ secrets.CRON_SECRET }}"
+          else
+            echo "APP_URL secret is not set. Please set APP_URL in repository secrets (e.g. https://your-domain.vercel.app)."
+          fi

@@ -50,35 +50,27 @@ export function QualityTiersEditor({
     return initialTiers && initialTiers.length > 0 ? initialTiers : DEFAULT_QUALITY_TIERS
   })
 
-  // 记录最近一次向外部父组件同步的 tiers 引用，避免父组件重新传入同一数据导致本地 state 重新覆盖
-  const lastExportedTiersRef = React.useRef<NetworkQualityTier[] | null>(null)
-  const prevInitialTiersRef = React.useRef(initialTiers)
-  const onChangeTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  // 记录最近一次向外部父组件同步的 tiers 序列化结果，避免父组件重新传入同一数据导致本地 state 重新覆盖或死循环
+  const lastExportedJsonRef = React.useRef(
+    JSON.stringify(initialTiers && initialTiers.length > 0 ? initialTiers : DEFAULT_QUALITY_TIERS)
+  )
+  const prevInitialJsonRef = React.useRef(JSON.stringify(initialTiers || []))
 
   // 记录当前展开拾色器的档位序号
   const [openPickerIdx, setOpenPickerIdx] = React.useState<number | null>(null)
 
   React.useEffect(() => {
-    if (initialTiers && initialTiers.length > 0) {
-      // 如果这次 initialTiers 变动正是本组件刚向父组件抛出的数据，无需再覆盖本地
-      if (lastExportedTiersRef.current && initialTiers === lastExportedTiersRef.current) {
-        prevInitialTiersRef.current = initialTiers
-        return
-      }
-      if (initialTiers !== prevInitialTiersRef.current) {
-        prevInitialTiersRef.current = initialTiers
-        setTiers(initialTiers)
-      }
+    if (!initialTiers || initialTiers.length === 0) return
+    const currentJson = JSON.stringify(initialTiers)
+    // 如果父组件传入的内容与本地已导出的或上一次接收的完全一致，绝不重复触发 setTiers 造成渲染死循环
+    if (currentJson === prevInitialJsonRef.current || currentJson === lastExportedJsonRef.current) {
+      prevInitialJsonRef.current = currentJson
+      return
     }
+    prevInitialJsonRef.current = currentJson
+    lastExportedJsonRef.current = currentJson
+    setTiers(initialTiers)
   }, [initialTiers])
-
-  React.useEffect(() => {
-    return () => {
-      if (onChangeTimerRef.current) {
-        clearTimeout(onChangeTimerRef.current)
-      }
-    }
-  }, [])
 
   const [simLatency, setSimLatency] = React.useState<string>("50")
   const [simLoss, setSimLoss] = React.useState<string>("15")
@@ -92,24 +84,17 @@ export function QualityTiersEditor({
 
   const updateTiers = React.useCallback(
     (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
-      let updatedTiers: NetworkQualityTier[] = []
       setTiers((prev) => {
         const next = updater(prev)
-        updatedTiers = next
+        if (next === prev) return prev
+        const nextJson = JSON.stringify(next)
+        lastExportedJsonRef.current = nextJson
+        prevInitialJsonRef.current = nextJson
+        if (onChange) {
+          onChange(next)
+        }
         return next
       })
-
-      if (onChange) {
-        if (onChangeTimerRef.current) {
-          clearTimeout(onChangeTimerRef.current)
-        }
-        onChangeTimerRef.current = setTimeout(() => {
-          if (updatedTiers && updatedTiers.length > 0) {
-            lastExportedTiersRef.current = updatedTiers
-            onChange(updatedTiers)
-          }
-        }, 100)
-      }
     },
     [onChange]
   )

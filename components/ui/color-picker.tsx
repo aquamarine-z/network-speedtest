@@ -107,15 +107,6 @@ export function ColorPicker({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : uncontrolledOpen
-  const setOpen = React.useCallback(
-    (newOpen: boolean) => {
-      if (!isControlled) {
-        setUncontrolledOpen(newOpen)
-      }
-      controlledOnOpenChange?.(newOpen)
-    },
-    [isControlled, controlledOnOpenChange]
-  )
 
   const [color, setColor] = React.useState(value || "#8b5cf6")
   const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
@@ -124,13 +115,42 @@ export function ColorPicker({
   const hsvRef = React.useRef(hsv)
   hsvRef.current = hsv
   const isDraggingRef = React.useRef(false)
-  const rafIdRef = React.useRef<number | null>(null)
+  const throttleTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const pendingColorRef = React.useRef<string | null>(null)
   const lastEmittedColorRef = React.useRef(value || "#8b5cf6")
   const onChangeRef = React.useRef(onChange)
   onChangeRef.current = onChange
 
   const satContainerRef = React.useRef<HTMLDivElement | null>(null)
   const hueContainerRef = React.useRef<HTMLDivElement | null>(null)
+
+  // 立即冲刷最终颜色给父组件
+  const flushEnd = React.useCallback(() => {
+    isDraggingRef.current = false
+    if (throttleTimerRef.current !== null) {
+      clearTimeout(throttleTimerRef.current)
+      throttleTimerRef.current = null
+    }
+    const final = pendingColorRef.current || lastEmittedColorRef.current
+    pendingColorRef.current = null
+    if (final && final.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+      lastEmittedColorRef.current = final
+      onChangeRef.current(final)
+    }
+  }, [])
+
+  const setOpen = React.useCallback(
+    (newOpen: boolean) => {
+      if (!newOpen) {
+        flushEnd()
+      }
+      if (!isControlled) {
+        setUncontrolledOpen(newOpen)
+      }
+      controlledOnOpenChange?.(newOpen)
+    },
+    [isControlled, controlledOnOpenChange, flushEnd]
+  )
 
   // 当弹窗打开时，初始化同步本地状态
   React.useEffect(() => {
@@ -142,6 +162,7 @@ export function ColorPicker({
       setColor(initial)
       setInputVal(initial)
       lastEmittedColorRef.current = initial
+      pendingColorRef.current = null
     }
   }, [open])
 
@@ -154,19 +175,21 @@ export function ColorPicker({
       setColor(value)
       setInputVal(value)
       lastEmittedColorRef.current = value
+      pendingColorRef.current = null
     }
   }, [open, value])
 
-  const flushEnd = React.useCallback(() => {
-    isDraggingRef.current = false
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
+  // 组件卸载时清理未完成的节流计时器
+  React.useEffect(() => {
+    return () => {
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
+      }
     }
-    onChangeRef.current(lastEmittedColorRef.current)
   }, [])
 
-  // 全局释放保护
+  // 全局释放保护：防止用户在拾色器外松开指针导致拖拽状态未释放
   React.useEffect(() => {
     const handleGlobalPointerUp = () => {
       if (isDraggingRef.current) {
@@ -178,12 +201,30 @@ export function ColorPicker({
     return () => {
       window.removeEventListener("pointerup", handleGlobalPointerUp)
       window.removeEventListener("pointercancel", handleGlobalPointerUp)
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current)
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
       }
     }
   }, [flushEnd])
 
+  // 节流向父级派发更新（拖动期间限制为最高 ~8 次/秒，杜绝高频卡死与闪屏；本地 UI 则依然 120fps 实时渲染）
+  const scheduleThrottledEmit = React.useCallback((newHex: string) => {
+    pendingColorRef.current = newHex
+    if (throttleTimerRef.current === null) {
+      throttleTimerRef.current = setTimeout(() => {
+        throttleTimerRef.current = null
+        if (pendingColorRef.current) {
+          const val = pendingColorRef.current
+          pendingColorRef.current = null
+          lastEmittedColorRef.current = val
+          onChangeRef.current(val)
+        }
+      }, 120)
+    }
+  }, [])
+
+  // 统一 HSV 变动入口
   const applyHsvChange = React.useCallback(
     (newHsv: { h: number; s: number; v: number }) => {
       hsvRef.current = newHsv
@@ -191,16 +232,9 @@ export function ColorPicker({
       const newHex = hsvToHex(newHsv.h, newHsv.s, newHsv.v)
       setColor(newHex)
       setInputVal(newHex)
-      lastEmittedColorRef.current = newHex
-
-      if (rafIdRef.current === null) {
-        rafIdRef.current = requestAnimationFrame(() => {
-          rafIdRef.current = null
-          onChangeRef.current(lastEmittedColorRef.current)
-        })
-      }
+      scheduleThrottledEmit(newHex)
     },
-    []
+    [scheduleThrottledEmit]
   )
 
   // 饱和度/明度面板指针交互
@@ -271,11 +305,12 @@ export function ColorPicker({
   const handleHexChange = (val: string) => {
     setInputVal(val)
     if (/^#([0-9a-fA-F]{6})$/.test(val)) {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current)
-        rafIdRef.current = null
+      if (throttleTimerRef.current !== null) {
+        clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
       }
       isDraggingRef.current = false
+      pendingColorRef.current = null
       const parsed = hexToHsv(val, hsvRef.current.h)
       hsvRef.current = parsed
       setHsv(parsed)
@@ -292,11 +327,12 @@ export function ColorPicker({
   }
 
   const handlePresetClick = (hex: string) => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
+    if (throttleTimerRef.current !== null) {
+      clearTimeout(throttleTimerRef.current)
+      throttleTimerRef.current = null
     }
     isDraggingRef.current = false
+    pendingColorRef.current = null
     const parsed = hexToHsv(hex, hsvRef.current.h)
     hsvRef.current = parsed
     setHsv(parsed)
@@ -348,6 +384,16 @@ export function ColorPicker({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => {
+          if (isDraggingRef.current) {
+            e.preventDefault()
+          }
+        }}
+        onInteractOutside={(e) => {
+          if (isDraggingRef.current) {
+            e.preventDefault()
+          }
+        }}
         className={cn(
           "z-50 w-64 p-3.5 rounded-3xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-2xl shadow-2xl space-y-3",
           className

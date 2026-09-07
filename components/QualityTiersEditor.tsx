@@ -93,13 +93,18 @@ export function QualityTiersEditor({
   const updateTiers = React.useCallback(
     (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
       let updatedTiers: NetworkQualityTier[] = []
+      let didChange = false
       setTiers((prev) => {
         const next = updater(prev)
+        if (next === prev) {
+          return prev
+        }
+        didChange = true
         updatedTiers = next
         return next
       })
 
-      if (onChange) {
+      if (didChange && onChange) {
         if (onChangeTimerRef.current) {
           clearTimeout(onChangeTimerRef.current)
         }
@@ -134,13 +139,23 @@ export function QualityTiersEditor({
     })
   }
 
-  const handleUpdateTier = (index: number, updates: Partial<NetworkQualityTier>) => {
-    updateTiers((prev) => {
-      const next = [...prev]
-      next[index] = { ...next[index], ...updates }
-      return next
-    })
-  }
+  const handleUpdateTier = React.useCallback(
+    (index: number, updates: Partial<NetworkQualityTier>) => {
+      updateTiers((prev) => {
+        const current = prev[index]
+        if (current) {
+          const isSame = (Object.keys(updates) as (keyof NetworkQualityTier)[]).every(
+            (k) => current[k] === updates[k]
+          )
+          if (isSame) return prev
+        }
+        const next = [...prev]
+        next[index] = { ...next[index], ...updates }
+        return next
+      })
+    },
+    [updateTiers]
+  )
 
   const handleDeleteTier = (index: number) => {
     if (tiers.length <= 1) return

@@ -62,39 +62,90 @@ export function ColorPicker({
     [isControlled, controlledOnOpenChange]
   )
 
+  // pickerColor 是传给 HexColorPicker 的受控色彩，在拖拽期间保持不变，彻底杜绝 react-colorful 内部 Effect 1 触发死循环
+  const [pickerColor, setPickerColor] = React.useState(value || "#8b5cf6")
+  // localColor 与 inputVal 用于实时响应预览色块和十六进制输入框
   const [localColor, setLocalColor] = React.useState(value || "#8b5cf6")
   const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
-  const valueRef = React.useRef(value)
-  valueRef.current = value
 
+  const isDraggingRef = React.useRef(false)
   const rafIdRef = React.useRef<number | null>(null)
+  const pendingColorRef = React.useRef(value || "#8b5cf6")
   const lastEmittedColorRef = React.useRef(value || "#8b5cf6")
+  const onChangeRef = React.useRef(onChange)
+  onChangeRef.current = onChange
 
-  // 仅在弹窗打开时，初始化同步本地颜色与输入框文本；拖拽期间绝不依赖 value 执行 useEffect
+  // 当外部传入的 value 发生非拖拽变更时（例如重置策略），同步更新内部各状态
+  React.useEffect(() => {
+    if (isDraggingRef.current) return
+    if (value && value.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+      lastEmittedColorRef.current = value
+      pendingColorRef.current = value
+      setPickerColor(value)
+      setLocalColor(value)
+      setInputVal(value)
+    }
+  }, [value])
+
+  // 弹窗打开时，重置拖拽标记并同步初始颜色
   React.useEffect(() => {
     if (open) {
-      const initial = valueRef.current || "#8b5cf6"
+      const initial = value || "#8b5cf6"
+      isDraggingRef.current = false
+      lastEmittedColorRef.current = initial
+      pendingColorRef.current = initial
+      setPickerColor(initial)
       setLocalColor(initial)
       setInputVal(initial)
-      lastEmittedColorRef.current = initial
     }
-  }, [open])
+  }, [open, value])
 
-  // 组件卸载时清理未完成的 RAF
+  // 全局 pointerup / pointercancel 兜底：防止用户在拾色器外松开鼠标导致 isDraggingRef 卡在 true
   React.useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current)
+          rafIdRef.current = null
+        }
+        const finalColor = pendingColorRef.current
+        setPickerColor(finalColor)
+        setLocalColor(finalColor)
+        setInputVal(finalColor)
+        if (finalColor.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+          lastEmittedColorRef.current = finalColor
+          onChangeRef.current(finalColor)
+        }
+      }
+    }
+
+    window.addEventListener("pointerup", handleGlobalPointerUp)
+    window.addEventListener("pointercancel", handleGlobalPointerUp)
     return () => {
+      window.removeEventListener("pointerup", handleGlobalPointerUp)
+      window.removeEventListener("pointercancel", handleGlobalPointerUp)
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
       }
     }
   }, [])
 
+  // 处理输入框十六进制变更
   const handleHexChange = (val: string) => {
     setInputVal(val)
     if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+      isDraggingRef.current = false
+      setPickerColor(val)
       setLocalColor(val)
+      pendingColorRef.current = val
       lastEmittedColorRef.current = val
-      onChange(val)
+      onChangeRef.current(val)
     }
   }
 
@@ -104,17 +155,42 @@ export function ColorPicker({
     }
   }
 
+  // 拾色器在指针移动（拖拽中）时的回调
+  // 注意：此处绝不同步更新 pickerColor，避免 react-colorful 内部通过 Effect 1 引起级联渲染死循环
+  // 并且使用 requestAnimationFrame 将 state 更新与 parent onChange 限制在 60fps / 120fps 帧周期内
   const handlePickerChange = (color: string) => {
-    setLocalColor(color)
-    setInputVal(color)
-    lastEmittedColorRef.current = color
+    isDraggingRef.current = true
+    pendingColorRef.current = color
 
-    // 使用 requestAnimationFrame 进行帧合并防抖，确保无论拖动多快，一帧只向上层派发一次更新
     if (rafIdRef.current === null) {
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = null
-        onChange(lastEmittedColorRef.current)
+        const current = pendingColorRef.current
+        // 仅更新视觉预览色块与输入框，不更新 pickerColor
+        setLocalColor(current)
+        setInputVal(current)
+        lastEmittedColorRef.current = current
+        onChangeRef.current(current)
       })
+    }
+  }
+
+  // 拾色器拖拽或点击结束
+  const handlePickerChangeEnd = (color?: string) => {
+    isDraggingRef.current = false
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+
+    const final = color || pendingColorRef.current || localColor
+    pendingColorRef.current = final
+    setPickerColor(final)
+    setLocalColor(final)
+    setInputVal(final)
+    if (final.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+      lastEmittedColorRef.current = final
+      onChangeRef.current(final)
     }
   }
 
@@ -123,10 +199,13 @@ export function ColorPicker({
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
+    isDraggingRef.current = false
+    pendingColorRef.current = hex
+    setPickerColor(hex)
     setLocalColor(hex)
     setInputVal(hex)
     lastEmittedColorRef.current = hex
-    onChange(hex)
+    onChangeRef.current(hex)
   }
 
   const handleEyeDropper = async () => {
@@ -176,10 +255,16 @@ export function ColorPicker({
           className
         )}
       >
-        <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
+        <div
+          className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs"
+          onPointerDown={() => {
+            isDraggingRef.current = true
+          }}
+        >
           <HexColorPicker
-            color={localColor}
+            color={pickerColor}
             onChange={handlePickerChange}
+            onChangeEnd={handlePickerChangeEnd}
             style={{ width: "100%", height: 164 }}
           />
         </div>

@@ -31,6 +31,8 @@ const QUICK_PRESETS = [
 interface ColorPickerProps {
   value: string
   onChange: (value: string) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   disabled?: boolean
   className?: string
   triggerClassName?: string
@@ -40,28 +42,62 @@ interface ColorPickerProps {
 export function ColorPicker({
   value,
   onChange,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
   disabled = false,
   className,
   triggerClassName,
   children,
 }: ColorPickerProps) {
-  const [open, setOpen] = React.useState(false)
-  const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : uncontrolledOpen
+  const setOpen = React.useCallback(
+    (newOpen: boolean) => {
+      if (!isControlled) {
+        setUncontrolledOpen(newOpen)
+      }
+      controlledOnOpenChange?.(newOpen)
+    },
+    [isControlled, controlledOnOpenChange]
+  )
 
+  const initialColor = value || "#8b5cf6"
+  const [localColor, setLocalColor] = React.useState(initialColor)
+  const [inputVal, setInputVal] = React.useState(initialColor)
+
+  // 当外部 value 改变时，仅在与本地值实际不一致时同步（忽略大小写差异）
   React.useEffect(() => {
-    if (value) {
+    if (value && value.toLowerCase() !== localColor.toLowerCase()) {
+      setLocalColor(value)
       setInputVal(value)
     }
-  }, [value])
+  }, [value, localColor])
+
+  // 当弹窗打开时，确保同步最新的外部颜色
+  React.useEffect(() => {
+    if (open && value) {
+      setLocalColor(value)
+      setInputVal(value)
+    }
+  }, [open, value])
 
   const handleHexChange = (val: string) => {
     setInputVal(val)
     if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) {
+      setLocalColor(val)
       onChange(val)
     }
   }
 
+  const handleHexBlur = () => {
+    if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inputVal)) {
+      setInputVal(localColor)
+    }
+  }
+
   const handlePickerChange = (color: string) => {
+    setLocalColor(color)
     setInputVal(color)
     onChange(color)
   }
@@ -91,14 +127,14 @@ export function ColorPicker({
           <button
             type="button"
             className={cn(
-              "group relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none",
+              "group relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none cursor-pointer",
               triggerClassName
             )}
             title={t.common.colorPicker.open}
           >
             <span
               className="h-5 w-5 rounded-full shadow-xs flex items-center justify-center border border-black/10 dark:border-white/15"
-              style={{ backgroundColor: value || "#8b5cf6" }}
+              style={{ backgroundColor: localColor }}
             />
           </button>
         )}
@@ -107,14 +143,15 @@ export function ColorPicker({
       <PopoverContent
         align="start"
         sideOffset={6}
+        onOpenAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          "w-64 p-3.5 rounded-3xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-2xl shadow-2xl space-y-3",
+          "z-50 w-64 p-3.5 rounded-3xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-2xl shadow-2xl space-y-3",
           className
         )}
       >
         <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
           <HexColorPicker
-            color={value || "#8b5cf6"}
+            color={localColor}
             onChange={handlePickerChange}
             style={{ width: "100%", height: 164 }}
           />
@@ -123,13 +160,14 @@ export function ColorPicker({
         <div className="flex items-center gap-2">
           <div
             className="h-8 w-8 rounded-xl border border-black/10 dark:border-white/10 shadow-xs shrink-0"
-            style={{ backgroundColor: value || "#8b5cf6" }}
+            style={{ backgroundColor: localColor }}
           />
           <div className="relative flex-1">
             <Input
               type="text"
               value={inputVal}
               onChange={(e) => handleHexChange(e.target.value)}
+              onBlur={handleHexBlur}
               placeholder="#8b5cf6"
               className="h-8 text-xs font-mono rounded-xl px-2.5 bg-neutral-50 dark:bg-neutral-900 border-neutral-200/80 dark:border-neutral-800 uppercase"
             />
@@ -141,7 +179,7 @@ export function ColorPicker({
               size="sm"
               onClick={handleEyeDropper}
               title={t.common.colorPicker.pipette}
-              className="h-8 w-8 p-0 rounded-xl border-neutral-200/80 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white"
+              className="h-8 w-8 p-0 rounded-xl border-neutral-200/80 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300 hover:text-black dark:hover:text-white cursor-pointer"
             >
               <Pipette className="h-3.5 w-3.5" />
             </Button>
@@ -154,14 +192,14 @@ export function ColorPicker({
           </div>
           <div className="grid grid-cols-8 gap-1.5 w-full">
             {QUICK_PRESETS.map((hex) => {
-              const isSelected = (value || "").toLowerCase() === hex.toLowerCase()
+              const isSelected = localColor.toLowerCase() === hex.toLowerCase()
               return (
                 <button
                   key={hex}
                   type="button"
                   onClick={() => handlePickerChange(hex)}
                   title={hex}
-                  className="group/preset relative flex w-full aspect-square items-center justify-center rounded-lg transition-transform hover:scale-110 outline-none focus:outline-none focus-visible:outline-none"
+                  className="group/preset relative flex w-full aspect-square items-center justify-center rounded-lg transition-transform hover:scale-110 outline-none focus:outline-none focus-visible:outline-none cursor-pointer"
                   style={{ backgroundColor: hex }}
                 >
                   {isSelected && (

@@ -55,25 +55,33 @@ export function QualityTiersEditor({
     return initialTiers && initialTiers.length > 0 ? initialTiers : DEFAULT_QUALITY_TIERS
   })
 
-  const lastExternalTiersRef = React.useRef(initialTiers)
+  // 记录是否是组件内部发起的修改，避免内部修改通知父组件后，父组件重新传入 initialTiers 导致循环重渲染和状态回弹
+  const isInternalChangeRef = React.useRef(false)
+  const prevInitialTiersRef = React.useRef(initialTiers)
+  const onChangeTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+
+  // 记录当前展开拾色器的档位序号
+  const [openPickerIdx, setOpenPickerIdx] = React.useState<number | null>(null)
+
   React.useEffect(() => {
-    if (initialTiers && initialTiers.length > 0) {
-      lastExternalTiersRef.current = initialTiers
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false
+      prevInitialTiersRef.current = initialTiers
+      return
+    }
+    if (initialTiers && initialTiers !== prevInitialTiersRef.current && initialTiers.length > 0) {
+      prevInitialTiersRef.current = initialTiers
       setTiers(initialTiers)
     }
   }, [initialTiers])
 
-  const isMountedRef = React.useRef(false)
   React.useEffect(() => {
-    if (!isMountedRef.current) {
-      isMountedRef.current = true
-      return
+    return () => {
+      if (onChangeTimerRef.current) {
+        clearTimeout(onChangeTimerRef.current)
+      }
     }
-    if (tiers === lastExternalTiersRef.current) {
-      return
-    }
-    onChange?.(tiers)
-  }, [tiers, onChange])
+  }, [])
 
   const [simLatency, setSimLatency] = React.useState<string>("50")
   const [simLoss, setSimLoss] = React.useState<string>("15")
@@ -85,9 +93,21 @@ export function QualityTiersEditor({
     return simulateTierMatching(parsedSimLat, parsedSimLoss, tiers)
   }, [parsedSimLat, parsedSimLoss, tiers])
 
-  const updateTiers = (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
-    setTiers(updater)
-  }
+  const updateTiers = React.useCallback((updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
+    setTiers((prev) => {
+      const next = updater(prev)
+      isInternalChangeRef.current = true
+      if (onChange) {
+        if (onChangeTimerRef.current) {
+          clearTimeout(onChangeTimerRef.current)
+        }
+        onChangeTimerRef.current = setTimeout(() => {
+          onChange(next)
+        }, 80)
+      }
+      return next
+    })
+  }, [onChange])
 
   const handleMoveUp = (index: number) => {
     if (index <= 0) return
@@ -319,9 +339,14 @@ export function QualityTiersEditor({
                               <button
                                 key={c}
                                 type="button"
-                                onClick={() => handleUpdateTier(idx, { color: c })}
+                                onClick={() => {
+                                  handleUpdateTier(idx, { color: c })
+                                  if (openPickerIdx === idx) {
+                                    setOpenPickerIdx(null)
+                                  }
+                                }}
                                 title={cTheme.label}
-                                className={`group/swatch relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none ${
+                                className={`group/swatch relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none cursor-pointer ${
                                   isSelected
                                     ? "scale-105"
                                     : "opacity-75 hover:opacity-100"
@@ -337,6 +362,10 @@ export function QualityTiersEditor({
                           <div className="relative flex items-center">
                             <ColorPicker
                               value={tier.customColor || "#8b5cf6"}
+                              open={openPickerIdx === idx}
+                              onOpenChange={(isOpen) => {
+                                setOpenPickerIdx(isOpen ? idx : null)
+                              }}
                               onChange={(color) => {
                                 handleUpdateTier(idx, { color: "custom", customColor: color })
                               }}
@@ -347,9 +376,10 @@ export function QualityTiersEditor({
                                   if (tier.color !== "custom") {
                                     handleUpdateTier(idx, { color: "custom", customColor: tier.customColor || "#8b5cf6" })
                                   }
+                                  setOpenPickerIdx(openPickerIdx === idx ? null : idx)
                                 }}
                                 title={tier.color === "custom" ? t.quality.customColorTitle.replace("{color}", tier.customColor || "#8b5cf6") : t.quality.customColorOpenTitle}
-                                className={`group/swatch relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none ${
+                                className={`group/swatch relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none cursor-pointer ${
                                   tier.color === "custom"
                                     ? "scale-105"
                                     : "opacity-75 hover:opacity-100"
@@ -375,20 +405,16 @@ export function QualityTiersEditor({
                             </ColorPicker>
 
                             {tier.color === "custom" && (
-                              <ColorPicker
-                                value={tier.customColor || "#8b5cf6"}
-                                onChange={(color) => {
-                                  handleUpdateTier(idx, { color: "custom", customColor: color })
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenPickerIdx(openPickerIdx === idx ? null : idx)
                                 }}
+                                className="ml-1.5 px-2 py-0.5 rounded-lg border border-black/[0.08] dark:border-white/[0.1] bg-neutral-100/80 dark:bg-neutral-800/80 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80 font-mono text-[11px] text-neutral-600 dark:text-neutral-300 uppercase transition-colors cursor-pointer select-none"
+                                title={t.quality.customColorEditTitle}
                               >
-                                <button
-                                  type="button"
-                                  className="ml-1.5 px-2 py-0.5 rounded-lg border border-black/[0.08] dark:border-white/[0.1] bg-neutral-100/80 dark:bg-neutral-800/80 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80 font-mono text-[11px] text-neutral-600 dark:text-neutral-300 uppercase transition-colors cursor-pointer"
-                                  title={t.quality.customColorEditTitle}
-                                >
-                                  {tier.customColor || "#8b5cf6"}
-                                </button>
-                              </ColorPicker>
+                                {tier.customColor || "#8b5cf6"}
+                              </button>
                             )}
                           </div>
                         </div>

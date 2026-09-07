@@ -62,42 +62,42 @@ export function ColorPicker({
     [isControlled, controlledOnOpenChange]
   )
 
-  const initialColor = value || "#8b5cf6"
-  const [localColor, setLocalColor] = React.useState(initialColor)
-  const [inputVal, setInputVal] = React.useState(initialColor)
+  const currentColor = value || "#8b5cf6"
+  const [inputVal, setInputVal] = React.useState(currentColor)
+  const lastEmittedColorRef = React.useRef(currentColor)
 
-  // 当外部 value 改变时，仅在与本地值实际不一致时同步（忽略大小写差异）
+  // 当弹窗打开时，初始化同步输入框文本
   React.useEffect(() => {
-    if (value && value.toLowerCase() !== localColor.toLowerCase()) {
-      setLocalColor(value)
+    if (open) {
+      setInputVal(currentColor)
+      lastEmittedColorRef.current = currentColor
+    }
+  }, [open])
+
+  // 仅在外部传入的 value 真正发生变化（且非拾色器自身派发）时同步文本框，避免拖拽时的循环触发
+  React.useEffect(() => {
+    if (value && value.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+      lastEmittedColorRef.current = value
       setInputVal(value)
     }
-  }, [value, localColor])
-
-  // 当弹窗打开时，确保同步最新的外部颜色
-  React.useEffect(() => {
-    if (open && value) {
-      setLocalColor(value)
-      setInputVal(value)
-    }
-  }, [open, value])
+  }, [value])
 
   const handleHexChange = (val: string) => {
     setInputVal(val)
     if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) {
-      setLocalColor(val)
+      lastEmittedColorRef.current = val
       onChange(val)
     }
   }
 
   const handleHexBlur = () => {
     if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inputVal)) {
-      setInputVal(localColor)
+      setInputVal(currentColor)
     }
   }
 
   const handlePickerChange = (color: string) => {
-    setLocalColor(color)
+    lastEmittedColorRef.current = color
     setInputVal(color)
     onChange(color)
   }
@@ -134,7 +134,7 @@ export function ColorPicker({
           >
             <span
               className="h-5 w-5 rounded-full shadow-xs flex items-center justify-center border border-black/10 dark:border-white/15"
-              style={{ backgroundColor: localColor }}
+              style={{ backgroundColor: currentColor }}
             />
           </button>
         )}
@@ -151,7 +151,7 @@ export function ColorPicker({
       >
         <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
           <HexColorPicker
-            color={localColor}
+            color={currentColor}
             onChange={handlePickerChange}
             style={{ width: "100%", height: 164 }}
           />
@@ -160,7 +160,7 @@ export function ColorPicker({
         <div className="flex items-center gap-2">
           <div
             className="h-8 w-8 rounded-xl border border-black/10 dark:border-white/10 shadow-xs shrink-0"
-            style={{ backgroundColor: localColor }}
+            style={{ backgroundColor: currentColor }}
           />
           <div className="relative flex-1">
             <Input
@@ -192,7 +192,7 @@ export function ColorPicker({
           </div>
           <div className="grid grid-cols-8 gap-1.5 w-full">
             {QUICK_PRESETS.map((hex) => {
-              const isSelected = localColor.toLowerCase() === hex.toLowerCase()
+              const isSelected = currentColor.toLowerCase() === hex.toLowerCase()
               return (
                 <button
                   key={hex}

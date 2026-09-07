@@ -55,8 +55,8 @@ export function QualityTiersEditor({
     return initialTiers && initialTiers.length > 0 ? initialTiers : DEFAULT_QUALITY_TIERS
   })
 
-  // 记录是否是组件内部发起的修改，避免内部修改通知父组件后，父组件重新传入 initialTiers 导致循环重渲染和状态回弹
-  const isInternalChangeRef = React.useRef(false)
+  // 记录最近一次向外部父组件同步的 tiers 引用，避免父组件重新传入同一数据导致本地 state 重新覆盖
+  const lastExportedTiersRef = React.useRef<NetworkQualityTier[] | null>(null)
   const prevInitialTiersRef = React.useRef(initialTiers)
   const onChangeTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
@@ -64,14 +64,16 @@ export function QualityTiersEditor({
   const [openPickerIdx, setOpenPickerIdx] = React.useState<number | null>(null)
 
   React.useEffect(() => {
-    if (isInternalChangeRef.current) {
-      isInternalChangeRef.current = false
-      prevInitialTiersRef.current = initialTiers
-      return
-    }
-    if (initialTiers && initialTiers !== prevInitialTiersRef.current && initialTiers.length > 0) {
-      prevInitialTiersRef.current = initialTiers
-      setTiers(initialTiers)
+    if (initialTiers && initialTiers.length > 0) {
+      // 如果这次 initialTiers 变动正是本组件刚向父组件抛出的数据，无需再覆盖本地
+      if (lastExportedTiersRef.current && initialTiers === lastExportedTiersRef.current) {
+        prevInitialTiersRef.current = initialTiers
+        return
+      }
+      if (initialTiers !== prevInitialTiersRef.current) {
+        prevInitialTiersRef.current = initialTiers
+        setTiers(initialTiers)
+      }
     }
   }, [initialTiers])
 
@@ -93,21 +95,27 @@ export function QualityTiersEditor({
     return simulateTierMatching(parsedSimLat, parsedSimLoss, tiers)
   }, [parsedSimLat, parsedSimLoss, tiers])
 
-  const updateTiers = React.useCallback((updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
-    setTiers((prev) => {
-      const next = updater(prev)
-      isInternalChangeRef.current = true
+  const updateTiers = React.useCallback(
+    (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
+      let updatedTiers: NetworkQualityTier[] = []
+      setTiers((prev) => {
+        const next = updater(prev)
+        updatedTiers = next
+        return next
+      })
+
       if (onChange) {
         if (onChangeTimerRef.current) {
           clearTimeout(onChangeTimerRef.current)
         }
         onChangeTimerRef.current = setTimeout(() => {
-          onChange(next)
-        }, 80)
+          lastExportedTiersRef.current = updatedTiers
+          onChange(updatedTiers)
+        }, 100)
       }
-      return next
-    })
-  }, [onChange])
+    },
+    [onChange]
+  )
 
   const handleMoveUp = (index: number) => {
     if (index <= 0) return
@@ -376,7 +384,6 @@ export function QualityTiersEditor({
                                   if (tier.color !== "custom") {
                                     handleUpdateTier(idx, { color: "custom", customColor: tier.customColor || "#8b5cf6" })
                                   }
-                                  setOpenPickerIdx(openPickerIdx === idx ? null : idx)
                                 }}
                                 title={tier.color === "custom" ? t.quality.customColorTitle.replace("{color}", tier.customColor || "#8b5cf6") : t.quality.customColorOpenTitle}
                                 className={`group/swatch relative flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-150 hover:scale-110 outline-none focus:outline-none focus-visible:outline-none select-none cursor-pointer ${

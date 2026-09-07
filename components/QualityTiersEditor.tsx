@@ -82,21 +82,25 @@ export function QualityTiersEditor({
     return simulateTierMatching(parsedSimLat, parsedSimLoss, tiers)
   }, [parsedSimLat, parsedSimLoss, tiers])
 
+  // 本地 tiers 发生实质变更时，在渲染阶段结束后（useEffect 内）安全向父组件派发 onChange
+  // 坚决杜绝在 setState updater 渲染期间调用父级 setState 导致 React 报错:
+  // "Cannot update a component ('AdminPage') while rendering a different component ('QualityTiersEditor')"
+  React.useEffect(() => {
+    const currentJson = JSON.stringify(tiers)
+    if (lastExportedJsonRef.current === currentJson) return
+    lastExportedJsonRef.current = currentJson
+    prevInitialJsonRef.current = currentJson
+    onChange?.(tiers)
+  }, [tiers, onChange])
+
   const updateTiers = React.useCallback(
     (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
       setTiers((prev) => {
         const next = updater(prev)
-        if (next === prev) return prev
-        const nextJson = JSON.stringify(next)
-        lastExportedJsonRef.current = nextJson
-        prevInitialJsonRef.current = nextJson
-        if (onChange) {
-          onChange(next)
-        }
-        return next
+        return next === prev ? prev : next
       })
     },
-    [onChange]
+    []
   )
 
   const handleMoveUp = (index: number) => {

@@ -93,24 +93,21 @@ export function QualityTiersEditor({
   const updateTiers = React.useCallback(
     (updater: (prev: NetworkQualityTier[]) => NetworkQualityTier[]) => {
       let updatedTiers: NetworkQualityTier[] = []
-      let didChange = false
       setTiers((prev) => {
         const next = updater(prev)
-        if (next === prev) {
-          return prev
-        }
-        didChange = true
         updatedTiers = next
         return next
       })
 
-      if (didChange && onChange) {
+      if (onChange) {
         if (onChangeTimerRef.current) {
           clearTimeout(onChangeTimerRef.current)
         }
         onChangeTimerRef.current = setTimeout(() => {
-          lastExportedTiersRef.current = updatedTiers
-          onChange(updatedTiers)
+          if (updatedTiers && updatedTiers.length > 0) {
+            lastExportedTiersRef.current = updatedTiers
+            onChange(updatedTiers)
+          }
         }, 100)
       }
     },

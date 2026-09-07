@@ -132,8 +132,10 @@ export function ColorPicker({
 
   // HexColorPicker 拖拽与选色回调
   // 本地 color 立即同步（保证与 react-colorful 内部同步，光标随鼠标 60/120fps 丝滑跟随，绝不卡顿、绝不回弹）
+  // HexColorPicker 拖拽与选色回调
+  // 本地 color 立即同步（保证与 react-colorful 内部同步，光标随鼠标 60/120fps 丝滑跟随，绝不卡顿、绝不回弹）
   // 向父组件派发则使用 requestAnimationFrame 合并为一帧一次，避免高频 mousemove 导致父级全量重渲染过载
-  const handlePickerChange = (newColor: string) => {
+  const handlePickerChange = React.useCallback((newColor: string) => {
     setColor(newColor)
     setInputVal(newColor)
     lastEmittedColorRef.current = newColor
@@ -144,20 +146,22 @@ export function ColorPicker({
         onChangeRef.current(lastEmittedColorRef.current)
       })
     }
-  }
+  }, [])
 
   // 拖拽或点击结束回调，立即冲刷最后一次颜色到父级
-  const handlePickerChangeEnd = (newColor?: string) => {
+  const handlePickerChangeEnd = React.useCallback((newColor?: string) => {
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
-    const final = newColor || lastEmittedColorRef.current || color
-    setColor(final)
-    setInputVal(final)
-    lastEmittedColorRef.current = final
-    onChangeRef.current(final)
-  }
+    const final = newColor || lastEmittedColorRef.current
+    if (final) {
+      setColor(final)
+      setInputVal(final)
+      lastEmittedColorRef.current = final
+      onChangeRef.current(final)
+    }
+  }, [])
 
   const handlePresetClick = (hex: string) => {
     if (rafIdRef.current !== null) {
@@ -212,12 +216,22 @@ export function ColorPicker({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => {
+          // 如果点击或拖拽是在色盘区域内部（包含快速滑出色盘边缘的 mousemove），防止关闭中断拖拽
+          const target = e.target as HTMLElement | null
+          if (target?.closest?.('.react-colorful')) {
+            e.preventDefault()
+          }
+        }}
         className={cn(
           "z-50 w-64 p-3.5 rounded-3xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-2xl shadow-2xl space-y-3",
           className
         )}
       >
-        <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
+        <div
+          className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs select-none touch-none"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <HexColorPicker
             color={color}
             onChange={handlePickerChange}

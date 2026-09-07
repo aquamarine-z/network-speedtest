@@ -62,29 +62,37 @@ export function ColorPicker({
     [isControlled, controlledOnOpenChange]
   )
 
-  const currentColor = value || "#8b5cf6"
-  const [inputVal, setInputVal] = React.useState(currentColor)
-  const lastEmittedColorRef = React.useRef(currentColor)
+  const [localColor, setLocalColor] = React.useState(value || "#8b5cf6")
+  const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
+  const valueRef = React.useRef(value)
+  valueRef.current = value
 
-  // 当弹窗打开时，初始化同步输入框文本
+  const rafIdRef = React.useRef<number | null>(null)
+  const lastEmittedColorRef = React.useRef(value || "#8b5cf6")
+
+  // 仅在弹窗打开时，初始化同步本地颜色与输入框文本；拖拽期间绝不依赖 value 执行 useEffect
   React.useEffect(() => {
     if (open) {
-      setInputVal(currentColor)
-      lastEmittedColorRef.current = currentColor
+      const initial = valueRef.current || "#8b5cf6"
+      setLocalColor(initial)
+      setInputVal(initial)
+      lastEmittedColorRef.current = initial
     }
   }, [open])
 
-  // 仅在外部传入的 value 真正发生变化（且非拾色器自身派发）时同步文本框，避免拖拽时的循环触发
+  // 组件卸载时清理未完成的 RAF
   React.useEffect(() => {
-    if (value && value.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
-      lastEmittedColorRef.current = value
-      setInputVal(value)
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
     }
-  }, [value])
+  }, [])
 
   const handleHexChange = (val: string) => {
     setInputVal(val)
     if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) {
+      setLocalColor(val)
       lastEmittedColorRef.current = val
       onChange(val)
     }
@@ -92,14 +100,33 @@ export function ColorPicker({
 
   const handleHexBlur = () => {
     if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inputVal)) {
-      setInputVal(currentColor)
+      setInputVal(localColor)
     }
   }
 
   const handlePickerChange = (color: string) => {
-    lastEmittedColorRef.current = color
+    setLocalColor(color)
     setInputVal(color)
-    onChange(color)
+    lastEmittedColorRef.current = color
+
+    // 使用 requestAnimationFrame 进行帧合并防抖，确保无论拖动多快，一帧只向上层派发一次更新
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null
+        onChange(lastEmittedColorRef.current)
+      })
+    }
+  }
+
+  const handlePresetClick = (hex: string) => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    setLocalColor(hex)
+    setInputVal(hex)
+    lastEmittedColorRef.current = hex
+    onChange(hex)
   }
 
   const handleEyeDropper = async () => {
@@ -108,7 +135,7 @@ export function ColorPicker({
         const eyeDropper = new (window as any).EyeDropper()
         const result = await eyeDropper.open()
         if (result?.sRGBHex) {
-          handlePickerChange(result.sRGBHex)
+          handlePresetClick(result.sRGBHex)
         }
       } catch {
         // Ignored or cancelled by user
@@ -134,7 +161,7 @@ export function ColorPicker({
           >
             <span
               className="h-5 w-5 rounded-full shadow-xs flex items-center justify-center border border-black/10 dark:border-white/15"
-              style={{ backgroundColor: currentColor }}
+              style={{ backgroundColor: open ? localColor : (value || "#8b5cf6") }}
             />
           </button>
         )}
@@ -151,7 +178,7 @@ export function ColorPicker({
       >
         <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
           <HexColorPicker
-            color={currentColor}
+            color={localColor}
             onChange={handlePickerChange}
             style={{ width: "100%", height: 164 }}
           />
@@ -160,7 +187,7 @@ export function ColorPicker({
         <div className="flex items-center gap-2">
           <div
             className="h-8 w-8 rounded-xl border border-black/10 dark:border-white/10 shadow-xs shrink-0"
-            style={{ backgroundColor: currentColor }}
+            style={{ backgroundColor: localColor }}
           />
           <div className="relative flex-1">
             <Input
@@ -192,12 +219,12 @@ export function ColorPicker({
           </div>
           <div className="grid grid-cols-8 gap-1.5 w-full">
             {QUICK_PRESETS.map((hex) => {
-              const isSelected = currentColor.toLowerCase() === hex.toLowerCase()
+              const isSelected = localColor.toLowerCase() === hex.toLowerCase()
               return (
                 <button
                   key={hex}
                   type="button"
-                  onClick={() => handlePickerChange(hex)}
+                  onClick={() => handlePresetClick(hex)}
                   title={hex}
                   className="group/preset relative flex w-full aspect-square items-center justify-center rounded-lg transition-transform hover:scale-110 outline-none focus:outline-none focus-visible:outline-none cursor-pointer"
                   style={{ backgroundColor: hex }}

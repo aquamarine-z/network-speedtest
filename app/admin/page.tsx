@@ -1973,9 +1973,7 @@ ${t.admin.provider.docResponseTitle}
               <QualityTiersEditor
                 initialTiers={qualityTiers}
                 onChange={setQualityTiers}
-                onSave={handleSaveQualityTiers}
                 onReset={handleResetQualityTiers}
-                isSaving={savingTiers}
               />
             )}
 

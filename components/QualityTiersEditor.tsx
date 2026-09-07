@@ -25,7 +25,6 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
-  Save,
   Layers,
   ArrowRight,
   Info,
@@ -37,9 +36,7 @@ import { t } from "@/locales"
 interface QualityTiersEditorProps {
   initialTiers?: NetworkQualityTier[]
   onChange?: (tiers: NetworkQualityTier[]) => void
-  onSave?: (tiers: NetworkQualityTier[]) => Promise<void>
-  onReset?: () => Promise<void>
-  isSaving?: boolean
+  onReset?: () => Promise<void> | void
 }
 
 const COLOR_OPTIONS: QualityColor[] = ["emerald", "blue", "amber", "orange", "rose", "purple", "gray"]
@@ -47,9 +44,7 @@ const COLOR_OPTIONS: QualityColor[] = ["emerald", "blue", "amber", "orange", "ro
 export function QualityTiersEditor({
   initialTiers,
   onChange,
-  onSave,
   onReset,
-  isSaving = false,
 }: QualityTiersEditorProps) {
   const [tiers, setTiers] = React.useState<NetworkQualityTier[]>(() => {
     return initialTiers && initialTiers.length > 0 ? initialTiers : DEFAULT_QUALITY_TIERS
@@ -220,19 +215,6 @@ export function QualityTiersEditor({
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>{t.quality.resetBtn}</span>
-              </Button>
-            )}
-
-            {onSave && (
-              <Button
-                type="button"
-                onClick={() => onSave(tiers)}
-                disabled={isSaving}
-                size="sm"
-                className="gap-1.5 rounded-full text-xs px-4 h-9 bg-[#0066cc] hover:bg-[#0055b3] text-white dark:bg-[#2997ff] dark:hover:bg-[#147ce5] dark:text-black font-semibold shadow-sm"
-              >
-                <Save className="h-3.5 w-3.5" />
-                <span>{isSaving ? t.quality.savingBtn : t.quality.saveBtn}</span>
               </Button>
             )}
           </div>

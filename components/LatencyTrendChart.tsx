@@ -51,12 +51,35 @@ export function LatencyTrendChart() {
     return () => observer.disconnect()
   }, [])
 
+  // 24小时内数据筛选，如果没有取昨天数据
+  const { filteredHistory, isYesterday } = React.useMemo(() => {
+    if (!historyList || historyList.length === 0) {
+      return { filteredHistory: [], isYesterday: false }
+    }
+    const now = Date.now()
+    const oneDayMs = 24 * 60 * 60 * 1000
+    const last24hStart = now - oneDayMs
+    const yesterdayStart = now - 2 * oneDayMs
+
+    const last24h = historyList.filter((r) => r.timestamp >= last24hStart)
+    if (last24h.length > 0) {
+      return { filteredHistory: last24h, isYesterday: false }
+    }
+
+    const yesterday = historyList.filter((r) => r.timestamp >= yesterdayStart && r.timestamp < last24hStart)
+    if (yesterday.length > 0) {
+      return { filteredHistory: yesterday, isYesterday: true }
+    }
+
+    return { filteredHistory: historyList, isYesterday: false }
+  }, [historyList])
+
   // 30分钟刻度聚合：将原始巡检记录聚合为30分钟步长桶，桶内数据求平均值
   const aggregatedData = React.useMemo<AggregatedBucket[]>(() => {
-    if (!historyList || historyList.length === 0) return []
+    if (!filteredHistory || filteredHistory.length === 0) return []
 
     // 确保按时间戳升序排序
-    const sorted = [...historyList].sort((a, b) => a.timestamp - b.timestamp)
+    const sorted = [...filteredHistory].sort((a, b) => a.timestamp - b.timestamp)
 
     const map = new Map<number, HistoryRecord[]>()
     sorted.forEach((rec) => {
@@ -611,7 +634,7 @@ export function LatencyTrendChart() {
         </div>
 
         <span className="inline-flex items-center rounded-md bg-neutral-100 dark:bg-neutral-800/80 px-2 py-0.5 text-[10px] font-mono text-neutral-500 dark:text-neutral-400">
-          {t.trend.aggregate30m}
+          {isYesterday ? t.regionHistory.yesterday : t.trend.range24h} · {t.trend.aggregate30m}
         </span>
       </div>
 

@@ -8,7 +8,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { dialog, SurfaceDialogContent } from "@/components/ui/surface"
-import { Calendar, MapPin, AlertCircle, Layers } from "lucide-react"
+import { MapPin, AlertCircle } from "lucide-react"
 import {
   RegionLatencyChart,
   groupRegionRecordsByRun,
@@ -41,11 +41,11 @@ function RegionHistoryDialogView({
   province: string
   close: (result?: void) => Promise<void>
 }) {
-  const [dates, setDates] = React.useState<string[]>([])
-  const [activeDate, setActiveDate] = React.useState<string>("")
   const [records, setRecords] = React.useState<ProbeLogRecord[]>([])
   const [dailyStats, setDailyStats] = React.useState<ProvinceDailyStat[]>([])
-  const [chartTimeRange, setChartTimeRange] = React.useState<ChartTimeRange>("7d")
+  const [chartTimeRange, setChartTimeRange] = React.useState<ChartTimeRange>("today")
+  const [isYesterday, setIsYesterday] = React.useState(false)
+  const [timeWindowLabel, setTimeWindowLabel] = React.useState("")
   const [loading, setLoading] = React.useState(true)
 
   // 按单次全国巡检聚合批次
@@ -58,41 +58,22 @@ function RegionHistoryDialogView({
     return [...groupedRuns].reverse()
   }, [groupedRuns])
 
-  // 当进入弹窗时，拉取历史可用日期、当天数据与 30 天日均聚合
+  // 当进入弹窗时，拉取近24小时数据（无数据自动回退昨天）与 30 天日均聚合
   React.useEffect(() => {
     setLoading(true)
     fetch(`/api/history?province=${encodeURIComponent(province)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
-          setDates(data.dates || [])
-          setActiveDate(data.selectedDate || "")
           setRecords(data.records || [])
           setDailyStats(data.dailyStats || [])
+          setIsYesterday(Boolean(data.isYesterday))
+          setTimeWindowLabel(data.timeWindowLabel || "")
         }
       })
       .catch((e) => console.error("Failed to load history:", e))
       .finally(() => setLoading(false))
   }, [province])
-
-  // 切换日期
-  const handleDateChange = (date: string) => {
-    if (date === activeDate) return
-    setActiveDate(date)
-    setLoading(true)
-    fetch(`/api/history?province=${encodeURIComponent(province)}&date=${encodeURIComponent(date)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setRecords(data.records || [])
-          if (data.dailyStats && data.dailyStats.length > 0) {
-            setDailyStats(data.dailyStats)
-          }
-        }
-      })
-      .catch((e) => console.error("Failed to load history for date:", e))
-      .finally(() => setLoading(false))
-  }
 
   // 计算当日平均延迟与极值区间
   const validRecords = records.filter((r) => r.latency_avg !== null && r.latency_avg > 0)
@@ -153,15 +134,6 @@ function RegionHistoryDialogView({
       <div className="space-y-3.5 pt-3 overflow-y-auto overflow-x-hidden pr-1 flex-1 min-h-0">
         {loading ? (
           <div className="space-y-3.5 animate-in fade-in-50 duration-200">
-            <div className="space-y-1.5">
-              <div className="h-3.5 w-36 rounded bg-neutral-200/70 dark:bg-neutral-800/70 animate-pulse" />
-              <div className="flex items-center gap-2 overflow-hidden">
-                <div className="h-7 w-24 rounded-xl bg-neutral-200/80 dark:bg-neutral-800/80 animate-pulse shrink-0" />
-                <div className="h-7 w-24 rounded-xl bg-neutral-100 dark:bg-neutral-800/40 animate-pulse shrink-0" />
-                <div className="h-7 w-24 rounded-xl bg-neutral-100 dark:bg-neutral-800/40 animate-pulse shrink-0" />
-              </div>
-            </div>
-
             <div className="grid grid-cols-3 gap-2.5">
               <div className="h-16 rounded-2xl border border-neutral-200/60 bg-neutral-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/80 animate-pulse" />
               <div className="h-16 rounded-2xl border border-neutral-200/60 bg-neutral-50/80 p-3 dark:border-neutral-800 dark:bg-neutral-900/80 animate-pulse" />
@@ -173,60 +145,39 @@ function RegionHistoryDialogView({
           </div>
         ) : (
           <>
-            <div>
-              <div className="flex items-center justify-between text-xs text-neutral-500 mb-1.5">
-                <span className="flex items-center gap-1 font-medium">
-                  <Calendar className="h-3.5 w-3.5 text-[#0066cc] dark:text-[#2997ff]" />
-                  {t.regionHistory.probeDate}:
-                </span>
-                <span className="text-[11px] text-neutral-400">
-                  {t.regionHistory.totalDays.replace("{count}", String(dates.length))}
-                </span>
-              </div>
-
-              {dates.length === 0 ? (
-                <div className="flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-5 text-center text-xs text-neutral-400 dark:border-neutral-800 dark:bg-neutral-900">
-                  <AlertCircle className="h-4 w-4 text-neutral-400" />
-                  {t.regionHistory.noRecords}
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  {dates.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => handleDateChange(d)}
-                      type="button"
-                      className={`rounded-xl px-2.5 py-1 font-mono text-xs transition-all duration-150 whitespace-nowrap ${
-                        activeDate === d
-                          ? "bg-[#0066cc] text-white shadow-xs dark:bg-[#2997ff] dark:text-black font-semibold"
-                          : "border border-black/[0.06] bg-neutral-100/70 text-neutral-700 hover:bg-neutral-200/80 dark:border-white/[0.08] dark:bg-neutral-800/60 dark:text-neutral-300"
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {activeDate && records.length > 0 && (
+            {records.length > 0 ? (
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between min-w-0">
-                  <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">{t.regionHistory.dayAvgLatency}</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+                      {isYesterday ? t.regionHistory.yesterdayAvgLatency : t.regionHistory.day24hAvgLatency}
+                    </span>
+                    {isYesterday && (
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.2 text-[9px] font-medium text-amber-600 dark:bg-amber-400/15 dark:text-amber-400 shrink-0">
+                        {t.regionHistory.yesterday}
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-0.5 font-mono text-base sm:text-xl font-bold text-neutral-900 dark:text-neutral-100 truncate">
                     {dayAvg > 0 ? `${dayAvg}` : "-"}
                     <span className="text-[10px] sm:text-xs font-normal text-neutral-400 ml-0.5">ms</span>
                   </p>
                 </div>
                 <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between min-w-0">
-                  <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">{t.regionHistory.inspectionRounds}</span>
+                  <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+                    {isYesterday ? t.regionHistory.yesterdayRounds : t.regionHistory.inspectionRounds}
+                  </span>
                   <p className="mt-0.5 font-mono text-base sm:text-xl font-bold text-[#0066cc] dark:text-[#2997ff] truncate">
                     {groupedRuns.length}
-                    <span className="text-[10px] sm:text-xs font-normal text-neutral-400 ml-0.5 whitespace-nowrap">{t.regionHistory.roundsWithNodes.replace("{count}", String(records.length))}</span>
+                    <span className="text-[10px] sm:text-xs font-normal text-neutral-400 ml-0.5 whitespace-nowrap">
+                      {t.regionHistory.roundsWithNodes.replace("{count}", String(records.length))}
+                    </span>
                   </p>
                 </div>
                 <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between min-w-0 overflow-hidden">
-                  <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">{t.regionHistory.extremeRange}</span>
+                  <span className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+                    {isYesterday ? t.regionHistory.yesterdayExtremeRange : t.regionHistory.extremeRange}
+                  </span>
                   <div className="mt-0.5 flex flex-wrap items-baseline gap-0.5 sm:gap-1 font-mono text-xs sm:text-sm font-semibold text-neutral-700 dark:text-neutral-300">
                     {minLatency !== null && maxLatency !== null ? (
                       <>
@@ -241,21 +192,25 @@ function RegionHistoryDialogView({
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-5 text-center text-xs text-neutral-400 dark:border-neutral-800 dark:bg-neutral-900">
+                <AlertCircle className="h-4 w-4 text-neutral-400" />
+                {t.regionHistory.noRecords}
+              </div>
             )}
 
-            {activeDate && (
-              <RegionLatencyChart
-                records={records}
-                dailyStats={dailyStats}
-                date={activeDate}
-                province={province}
-                timeRange={chartTimeRange}
-                onTimeRangeChange={setChartTimeRange}
-                onSelectDate={handleDateChange}
-              />
-            )}
+            <RegionLatencyChart
+              records={records}
+              dailyStats={dailyStats}
+              date={timeWindowLabel || province}
+              province={province}
+              isYesterday={isYesterday}
+              timeWindowLabel={timeWindowLabel}
+              timeRange={chartTimeRange}
+              onTimeRangeChange={setChartTimeRange}
+            />
 
-            {activeDate && records.length > 0 && (
+            {records.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs px-0.5 whitespace-nowrap overflow-hidden">
                   <h4 className="font-semibold text-neutral-800 dark:text-neutral-200 shrink-0">

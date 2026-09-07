@@ -462,27 +462,83 @@ export async function getLatestMeasurementFromDb(): Promise<MeasurementResult | 
   return null
 }
 
+export interface ProvinceHistoryResult {
+  records: any[]
+  isYesterday: boolean
+  timeWindowLabel: string
+}
+
 /**
- * 获取某个省份的历史记录，按日期筛选
+ * 获取某个省份的历史记录，默认获取近 24 小时内数据，若无数据则自动回退取昨天数据
  */
-export async function getProvinceHistory(province: string, dateDay?: string) {
+export async function getProvinceHistory(province: string, dateDay?: string): Promise<ProvinceHistoryResult> {
   await initDatabase()
+  const cleanProv = province.replace(/(省|市|自治区|特别行政区)/, '')
 
-  let sql = `
-    SELECT * FROM probe_logs 
-    WHERE (province = ? OR province LIKE ?)
-  `
-  const args: (string | number)[] = [province, `%${province.replace(/(省|市|自治区|特别行政区)/, '')}%`]
-
-  if (dateDay) {
-    sql += ` AND date_day = ?`
-    args.push(dateDay)
+  // 如果明确指定了某一特定日期（保留兼容性）
+  if (dateDay && dateDay !== '24h' && dateDay !== 'today') {
+    const res = await db.execute({
+      sql: `SELECT * FROM probe_logs WHERE (province = ? OR province LIKE ?) AND date_day = ? ORDER BY timestamp DESC LIMIT 200`,
+      args: [province, `%${cleanProv}%`, dateDay],
+    })
+    return {
+      records: res.rows,
+      isYesterday: false,
+      timeWindowLabel: dateDay,
+    }
   }
 
-  sql += ` ORDER BY timestamp DESC LIMIT 100`
+  const now = Date.now()
+  const oneDayMs = 24 * 60 * 60 * 1000
+  const last24hStart = now - oneDayMs
 
-  const res = await db.execute({ sql, args })
-  return res.rows
+  // 1. 优先获取近 24 小时内的数据
+  const res24h = await db.execute({
+    sql: `SELECT * FROM probe_logs WHERE (province = ? OR province LIKE ?) AND timestamp >= ? ORDER BY timestamp DESC LIMIT 200`,
+    args: [province, `%${cleanProv}%`, last24hStart],
+  })
+
+  if (res24h.rows && res24h.rows.length > 0) {
+    return {
+      records: res24h.rows,
+      isYesterday: false,
+      timeWindowLabel: '近 24 小时',
+    }
+  }
+
+  // 2. 如果近 24 小时内无数据，回退取昨天的数据
+  const yesterdayObj = new Date(now - oneDayMs)
+  const yYear = yesterdayObj.getFullYear()
+  const yMonth = String(yesterdayObj.getMonth() + 1).padStart(2, '0')
+  const yDay = String(yesterdayObj.getDate()).padStart(2, '0')
+  const yesterdayStr = `${yYear}-${yMonth}-${yDay}`
+
+  const resYesterday = await db.execute({
+    sql: `SELECT * FROM probe_logs WHERE (province = ? OR province LIKE ?) AND (date_day = ? OR (timestamp >= ? AND timestamp < ?)) ORDER BY timestamp DESC LIMIT 200`,
+    args: [province, `%${cleanProv}%`, yesterdayStr, now - 2 * oneDayMs, last24hStart],
+  })
+
+  if (resYesterday.rows && resYesterday.rows.length > 0) {
+    return {
+      records: resYesterday.rows,
+      isYesterday: true,
+      timeWindowLabel: `昨日数据 (${yesterdayStr})`,
+    }
+  }
+
+  // 3. 兜底：如果昨天也没有数据，取该省份最近存在的最新一批记录
+  const resFallback = await db.execute({
+    sql: `SELECT * FROM probe_logs WHERE (province = ? OR province LIKE ?) ORDER BY timestamp DESC LIMIT 100`,
+    args: [province, `%${cleanProv}%`],
+  })
+
+  const latestDateDay = resFallback.rows.length > 0 ? String(resFallback.rows[0].date_day || '') : ''
+
+  return {
+    records: resFallback.rows,
+    isYesterday: true,
+    timeWindowLabel: latestDateDay ? `历史数据 (${latestDateDay})` : '暂无数据',
+  }
 }
 
 /**

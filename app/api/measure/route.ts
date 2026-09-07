@@ -32,7 +32,7 @@ export async function GET() {
     }
   }
 
-  const history = await getRecentHistory(100)
+  const history = await getRecentHistory(300)
   const qualityTiers = await getQualityTiers()
   const updatedConfig = await getSchedulerConfig()
 

@@ -129,26 +129,28 @@ function downsampleRuns(runs: GroupedRegionRun[], maxPoints: number = 12): Group
 export interface RegionLatencyChartProps {
   records: LatencyRecordItem[]
   dailyStats?: ProvinceDailyStat[]
-  date: string
+  date?: string
   province?: string
+  isYesterday?: boolean
+  timeWindowLabel?: string
   timeRange?: ChartTimeRange
   onTimeRangeChange?: (range: ChartTimeRange) => void
-  onSelectDate?: (date: string) => void
 }
 
 export function RegionLatencyChart({
   records,
   dailyStats = [],
   date,
+  isYesterday,
+  timeWindowLabel,
   timeRange: controlledTimeRange,
   onTimeRangeChange,
-  onSelectDate,
 }: RegionLatencyChartProps) {
   const { locale } = useLocale()
   const chartRef = React.useRef<HTMLDivElement>(null)
   const chartInstanceRef = React.useRef<echartsType.ECharts | null>(null)
   const [isDarkMode, setIsDarkMode] = React.useState(false)
-  const [internalTimeRange, setInternalTimeRange] = React.useState<ChartTimeRange>("7d")
+  const [internalTimeRange, setInternalTimeRange] = React.useState<ChartTimeRange>("today")
   const timeRange = controlledTimeRange ?? internalTimeRange
 
   const handleRangeChange = (r: ChartTimeRange) => {
@@ -207,11 +209,13 @@ export function RegionLatencyChart({
       const items = last7Daily
       const xData = items.map((d) => d.displayDate)
       const yData = items.map((d) => d.avgLatency)
+      const yLossData = items.map((d) => d.avgLoss)
       return {
         mode: "7d" as const,
         items,
         xData,
         yData,
+        yLossData,
         pointCount: items.length,
         symbolSize: 7,
       }
@@ -221,25 +225,29 @@ export function RegionLatencyChart({
       const items = last30Daily
       const xData = items.map((d) => d.displayDate)
       const yData = items.map((d) => d.avgLatency)
+      const yLossData = items.map((d) => d.avgLoss)
       return {
         mode: "30d" as const,
         items,
         xData,
         yData,
+        yLossData,
         pointCount: items.length,
         symbolSize: 4.5,
       }
     }
 
-    // 今日模式 (稀疏采样后)
+    // 今日 / 24小时模式 (稀疏采样后)
     const items = sparseTodayRuns
     const xData = items.map((r) => r.timeStr)
     const yData = items.map((r) => r.avgLatency)
+    const yLossData = items.map((r) => r.avgLoss)
     return {
       mode: "today" as const,
       items,
       xData,
       yData,
+      yLossData,
       pointCount: items.length,
       symbolSize: items.length <= 1 ? 8 : 6,
     }
@@ -269,6 +277,7 @@ export function RegionLatencyChart({
         }
 
         const primaryColor = isDarkMode ? "#2997ff" : "#0066cc"
+        const lossColor = "#f43f5e"
         const textColor = isDarkMode ? "#a1a1aa" : "#71717a"
         const splitLineColor = isDarkMode ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)"
         const tooltipBg = isDarkMode ? "rgba(28, 28, 30, 0.94)" : "rgba(255, 255, 255, 0.96)"
@@ -281,10 +290,10 @@ export function RegionLatencyChart({
         const option: echartsType.EChartsOption = {
           animationDuration: 300,
           grid: {
-            top: 22,
-            right: 16,
+            top: 24,
+            right: isMobileView ? 36 : 42,
             bottom: 24,
-            left: 42,
+            left: isMobileView ? 38 : 42,
             containLabel: false,
           },
           tooltip: {
@@ -466,29 +475,51 @@ export function RegionLatencyChart({
               },
             },
           },
-          yAxis: {
-            type: "value",
-            axisLine: { show: false },
-            axisTick: { show: false },
-            splitLine: {
-              lineStyle: {
-                color: splitLineColor,
-                type: "solid",
+          yAxis: [
+            {
+              type: "value",
+              axisLine: { show: false },
+              axisTick: { show: false },
+              splitLine: {
+                lineStyle: {
+                  color: splitLineColor,
+                  type: "dashed",
+                },
+              },
+              axisLabel: {
+                color: textColor,
+                fontSize: 10,
+                fontFamily: "monospace",
+                formatter: "{value}ms",
               },
             },
-            axisLabel: {
-              color: textColor,
-              fontSize: 10,
-              fontFamily: "monospace",
-              formatter: "{value}ms",
+            {
+              type: "value",
+              min: 0,
+              max: (value: { max: number }) => {
+                if (!value || value.max <= 0) return 10
+                if (value.max <= 5) return 10
+                const buffered = Math.min(100, value.max * 1.25)
+                return Math.min(100, Math.ceil(buffered / 5) * 5)
+              },
+              axisLine: { show: false },
+              axisTick: { show: false },
+              splitLine: { show: false },
+              axisLabel: {
+                color: lossColor,
+                fontSize: 10,
+                fontFamily: "monospace",
+                formatter: "{value}%",
+              },
             },
-          },
+          ],
           series: [
             {
-              name: t.regionHistory.trendTitle,
+              name: t.regionHistory.chartSeriesLabel || "时延",
               type: "line",
+              yAxisIndex: 0,
               smooth: 0.35,
-              showSymbol: true,
+              showSymbol: currentDataConfig.pointCount <= 30,
               symbol: "circle",
               symbolSize: currentDataConfig.symbolSize,
               itemStyle: {
@@ -507,13 +538,13 @@ export function RegionLatencyChart({
               },
               lineStyle: {
                 color: primaryColor,
-                width: 2.5,
+                width: 2.4,
               },
               areaStyle: {
                 color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                   {
                     offset: 0,
-                    color: isDarkMode ? "rgba(41, 151, 255, 0.3)" : "rgba(0, 102, 204, 0.22)",
+                    color: isDarkMode ? "rgba(41, 151, 255, 0.28)" : "rgba(0, 102, 204, 0.22)",
                   },
                   {
                     offset: 1,
@@ -523,23 +554,45 @@ export function RegionLatencyChart({
               },
               data: currentDataConfig.yData,
             },
+            {
+              name: t.regionHistory.chartLossLabel || "丢包率",
+              type: "line",
+              yAxisIndex: 1,
+              smooth: 0.35,
+              showSymbol: currentDataConfig.pointCount <= 30,
+              symbol: "circle",
+              symbolSize: Math.max(4, currentDataConfig.symbolSize - 1.5),
+              itemStyle: {
+                color: lossColor,
+                borderWidth: 1.5,
+                borderColor: isDarkMode ? "#1c1c1e" : "#ffffff",
+              },
+              emphasis: {
+                scale: 1.5,
+                itemStyle: {
+                  color: lossColor,
+                  borderWidth: 2.5,
+                  shadowBlur: 8,
+                  shadowColor: `${lossColor}66`,
+                },
+              },
+              lineStyle: {
+                color: lossColor,
+                width: 1.8,
+              },
+              areaStyle: {
+                color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: "rgba(244, 63, 94, 0.18)" },
+                  { offset: 0.8, color: "rgba(244, 63, 94, 0.03)" },
+                  { offset: 1, color: "transparent" },
+                ]),
+              },
+              data: currentDataConfig.yLossData,
+            },
           ],
         }
 
         chart.setOption(option, true)
-
-        // 绑定点击点位交互（在 7d / 30d 模式下点击日期快速切换下方列表日期）
-        chart.off("click")
-        chart.on("click", (params: unknown) => {
-          const p = params as { dataIndex: number }
-          if (typeof p.dataIndex === "number") {
-            if (timeRange === "7d" && last7Daily[p.dataIndex]) {
-              onSelectDate?.(last7Daily[p.dataIndex].date)
-            } else if (timeRange === "30d" && last30Daily[p.dataIndex]) {
-              onSelectDate?.(last30Daily[p.dataIndex].date)
-            }
-          }
-        })
       } catch (err) {
         console.error("ECharts load/render error:", err)
       }
@@ -585,7 +638,7 @@ export function RegionLatencyChart({
       chartInstanceRef.current?.dispose()
       chartInstanceRef.current = null
     }
-  }, [currentDataConfig, isDarkMode, timeRange, last7Daily, last30Daily, sparseTodayRuns, onSelectDate, locale])
+  }, [currentDataConfig, isDarkMode, timeRange, last7Daily, last30Daily, sparseTodayRuns, locale])
 
   if (currentDataConfig.yData.length === 0) {
     return (
@@ -598,13 +651,29 @@ export function RegionLatencyChart({
   return (
     <div className="relative rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-3 sm:p-3.5 shadow-xs transition-all overflow-hidden">
       <div className="flex items-center justify-between gap-2 mb-2 px-0.5 whitespace-nowrap overflow-hidden">
-        <div className="flex items-center gap-1.5 min-w-0 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-[#0066cc] dark:bg-[#2997ff] shrink-0" />
-          <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 whitespace-nowrap">
-            {t.regionHistory.trendTitle}
-          </span>
-          <span className="text-[10px] text-neutral-400 font-mono hidden sm:inline whitespace-nowrap">
-            ({timeRange === "today" ? date : t.regionHistory.daysCount.replace("{count}", String(currentDataConfig.pointCount))})
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-[#0066cc] dark:bg-[#2997ff] shrink-0" />
+            <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 whitespace-nowrap">
+              {t.regionHistory.trendTitle}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+            <span className="inline-flex items-center gap-1 font-medium">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc] dark:bg-[#2997ff]" />
+              <span className="text-neutral-600 dark:text-neutral-300">{t.regionHistory.chartSeriesLabel || "时延"}</span>
+            </span>
+            <span className="inline-flex items-center gap-1 font-medium">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#f43f5e]" />
+              <span className="text-neutral-600 dark:text-neutral-300">{t.regionHistory.chartLossLabel || "丢包率"}</span>
+            </span>
+          </div>
+
+          <span className="text-[10px] text-neutral-400 font-mono hidden md:inline whitespace-nowrap">
+            ({timeRange === "today"
+              ? (isYesterday ? (timeWindowLabel || t.regionHistory.yesterday) : t.regionHistory.timeRanges.todayOnly)
+              : t.regionHistory.daysCount.replace("{count}", String(currentDataConfig.pointCount))})
           </span>
         </div>
 

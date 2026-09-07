@@ -186,7 +186,11 @@ export const jaJP: typeof zhCN = {
     probeDate: "測定日",
     totalDays: "計 {count} 日のデータ",
     noRecords: "指定日の記録なし",
-    dayAvgLatency: "当日総合平均",
+    dayAvgLatency: "24時間総合平均",
+    day24hAvgLatency: "24時間総合平均",
+    yesterdayAvgLatency: "昨日総合平均",
+    yesterdayRounds: "昨日の巡回回数",
+    yesterdayExtremeRange: "昨日の極値範囲",
     inspectionRounds: "総巡回回数",
     roundsWithNodes: "回 ({count}ノード)",
     extremeRange: "極値範囲",
@@ -243,7 +247,7 @@ export const jaJP: typeof zhCN = {
     timeRanges: {
       sevenDaysAvg: "7日平均",
       thirtyDaysAvg: "30日平均",
-      todayOnly: "本日明細",
+      todayOnly: "直近24時間",
     },
   },
   carrier: {

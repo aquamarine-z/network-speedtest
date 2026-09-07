@@ -186,7 +186,11 @@ export const koKR: typeof zhCN = {
     probeDate: "측정일",
     totalDays: "총 {count}일 데이터",
     noRecords: "지정일 기록 없음",
-    dayAvgLatency: "당일 종합 평균",
+    dayAvgLatency: "24시간 종합 평균",
+    day24hAvgLatency: "24시간 종합 평균",
+    yesterdayAvgLatency: "어제 종합 평균",
+    yesterdayRounds: "어제 순회 횟수",
+    yesterdayExtremeRange: "어제 극값 범위",
     inspectionRounds: "총 순회 횟수",
     roundsWithNodes: "회 ({count}노드)",
     extremeRange: "극값 범위",
@@ -243,7 +247,7 @@ export const koKR: typeof zhCN = {
     timeRanges: {
       sevenDaysAvg: "7일 평균",
       thirtyDaysAvg: "30일 평균",
-      todayOnly: "오늘 상세",
+      todayOnly: "최근 24시간",
     },
   },
   carrier: {

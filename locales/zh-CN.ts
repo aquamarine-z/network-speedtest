@@ -184,7 +184,11 @@ export const zhCN = {
     probeDate: "测量日期",
     totalDays: "共 {count} 天数据",
     noRecords: "所选日期无记录",
-    dayAvgLatency: "当日综合均值",
+    dayAvgLatency: "24小时综合均值",
+    day24hAvgLatency: "24小时综合均值",
+    yesterdayAvgLatency: "昨日综合均值",
+    yesterdayRounds: "昨日巡检轮次",
+    yesterdayExtremeRange: "昨日极值区间",
     inspectionRounds: "巡检总轮次",
     roundsWithNodes: "轮 ({count}节点)",
     extremeRange: "极值区间",
@@ -241,7 +245,7 @@ export const zhCN = {
     timeRanges: {
       sevenDaysAvg: "7日均值",
       thirtyDaysAvg: "30日均值",
-      todayOnly: "今日明细",
+      todayOnly: "近24小时",
     },
   },
   carrier: {

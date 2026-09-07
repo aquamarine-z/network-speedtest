@@ -186,7 +186,11 @@ export const enUS: typeof zhCN = {
     probeDate: "Date",
     totalDays: "{count}d",
     noRecords: "No records",
-    dayAvgLatency: "Daily Avg",
+    dayAvgLatency: "24h Avg",
+    day24hAvgLatency: "24h Avg",
+    yesterdayAvgLatency: "Yesterday Avg",
+    yesterdayRounds: "Yesterday Batches",
+    yesterdayExtremeRange: "Yesterday Range",
     inspectionRounds: "Batches",
     roundsWithNodes: "{count} nodes",
     extremeRange: "Range",
@@ -243,7 +247,7 @@ export const enUS: typeof zhCN = {
     timeRanges: {
       sevenDaysAvg: "7d Avg",
       thirtyDaysAvg: "30d Avg",
-      todayOnly: "Today",
+      todayOnly: "Last 24h",
     },
   },
   carrier: {

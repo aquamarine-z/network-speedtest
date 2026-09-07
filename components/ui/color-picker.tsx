@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { HexColorPicker } from "react-colorful"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -27,6 +26,62 @@ const QUICK_PRESETS = [
   "#64748b",
   "#18181b",
 ]
+
+export function hsvToHex(h: number, s: number, v: number): string {
+  s = Math.max(0, Math.min(1, s / 100))
+  v = Math.max(0, Math.min(1, v / 100))
+  h = ((h % 360) + 360) % 360
+  const c = v * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = v - c
+  let r = 0, g = 0, b = 0
+  if (h >= 0 && h < 60) {
+    r = c; g = x; b = 0
+  } else if (h >= 60 && h < 120) {
+    r = x; g = c; b = 0
+  } else if (h >= 120 && h < 180) {
+    r = 0; g = c; b = x
+  } else if (h >= 180 && h < 240) {
+    r = 0; g = x; b = c
+  } else if (h >= 240 && h < 300) {
+    r = x; g = 0; b = c
+  } else {
+    r = c; g = 0; b = x
+  }
+  const toHex = (n: number) => {
+    const val = Math.round((n + m) * 255)
+    const hex = Math.max(0, Math.min(255, val)).toString(16)
+    return hex.length === 1 ? "0" + hex : hex
+  }
+  return "#" + toHex(r) + toHex(g) + toHex(b)
+}
+
+export function hexToHsv(hex: string, fallbackHue = 0): { h: number; s: number; v: number } {
+  let cleaned = hex.replace("#", "").trim()
+  if (cleaned.length === 3) {
+    cleaned = cleaned.split("").map((c) => c + c).join("")
+  }
+  if (cleaned.length !== 6) return { h: fallbackHue, s: 0, v: 100 }
+  const r = parseInt(cleaned.substring(0, 2), 16) / 255
+  const g = parseInt(cleaned.substring(2, 4), 16) / 255
+  const b = parseInt(cleaned.substring(4, 6), 16) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  let h = fallbackHue
+  if (d !== 0) {
+    if (max === r) {
+      h = ((g - b) / d + (g < b ? 6 : 0)) * 60
+    } else if (max === g) {
+      h = ((b - r) / d + 2) * 60
+    } else {
+      h = ((r - g) / d + 4) * 60
+    }
+  }
+  const s = max === 0 ? 0 : (d / max) * 100
+  const v = max * 100
+  return { h, s, v }
+}
 
 interface ColorPickerProps {
   value: string
@@ -62,62 +117,168 @@ export function ColorPicker({
     [isControlled, controlledOnOpenChange]
   )
 
-  // 内部维护活跃颜色与输入框状态
   const [color, setColor] = React.useState(value || "#8b5cf6")
   const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
+  const [hsv, setHsv] = React.useState(() => hexToHsv(value || "#8b5cf6", 260))
 
+  const hsvRef = React.useRef(hsv)
+  hsvRef.current = hsv
+  const isDraggingRef = React.useRef(false)
   const rafIdRef = React.useRef<number | null>(null)
   const lastEmittedColorRef = React.useRef(value || "#8b5cf6")
   const onChangeRef = React.useRef(onChange)
   onChangeRef.current = onChange
 
-  // 弹窗打开时，初始化同步本地状态；若弹窗未打开，外部 value 变更时同步本地状态
+  const satContainerRef = React.useRef<HTMLDivElement | null>(null)
+  const hueContainerRef = React.useRef<HTMLDivElement | null>(null)
+
+  // 当弹窗打开时，初始化同步本地状态
   React.useEffect(() => {
     if (open) {
       const initial = value || "#8b5cf6"
+      const parsed = hexToHsv(initial, hsvRef.current.h)
+      setHsv(parsed)
+      hsvRef.current = parsed
       setColor(initial)
       setInputVal(initial)
       lastEmittedColorRef.current = initial
     }
   }, [open])
 
+  // 弹窗未打开时，若外部传入的 value 发生变动（例如重置策略），同步更新
   React.useEffect(() => {
-    // 仅在弹窗未打开时响应外部传入的 value 变更（例如父组件重置默认值）
-    // 弹窗打开期间完全由用户本地交互主导，杜绝父子组件间 state-prop 互踩引发的死循环
-    if (!open && value) {
+    if (!open && value && value.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
+      const parsed = hexToHsv(value, hsvRef.current.h)
+      setHsv(parsed)
+      hsvRef.current = parsed
       setColor(value)
       setInputVal(value)
       lastEmittedColorRef.current = value
     }
   }, [open, value])
 
-  // 弹窗关闭时，如果还有未冲刷的 RAF，立即冲刷最后选中的颜色
-  React.useEffect(() => {
-    if (!open && rafIdRef.current !== null) {
+  const flushEnd = React.useCallback(() => {
+    isDraggingRef.current = false
+    if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
-      onChangeRef.current(lastEmittedColorRef.current)
     }
-  }, [open])
+    onChangeRef.current(lastEmittedColorRef.current)
+  }, [])
 
-  // 组件卸载时清理 RAF
+  // 全局释放保护
   React.useEffect(() => {
-    return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current)
-        rafIdRef.current = null
+    const handleGlobalPointerUp = () => {
+      if (isDraggingRef.current) {
+        flushEnd()
       }
     }
-  }, [])
+    window.addEventListener("pointerup", handleGlobalPointerUp)
+    window.addEventListener("pointercancel", handleGlobalPointerUp)
+    return () => {
+      window.removeEventListener("pointerup", handleGlobalPointerUp)
+      window.removeEventListener("pointercancel", handleGlobalPointerUp)
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
+    }
+  }, [flushEnd])
+
+  const applyHsvChange = React.useCallback(
+    (newHsv: { h: number; s: number; v: number }) => {
+      hsvRef.current = newHsv
+      setHsv(newHsv)
+      const newHex = hsvToHex(newHsv.h, newHsv.s, newHsv.v)
+      setColor(newHex)
+      setInputVal(newHex)
+      lastEmittedColorRef.current = newHex
+
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null
+          onChangeRef.current(lastEmittedColorRef.current)
+        })
+      }
+    },
+    []
+  )
+
+  // 饱和度/明度面板指针交互
+  const updateSatFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!satContainerRef.current) return
+    const rect = satContainerRef.current.getBoundingClientRect()
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top))
+    const s = (x / rect.width) * 100
+    const v = 100 - (y / rect.height) * 100
+    applyHsvChange({ h: hsvRef.current.h, s, v })
+  }
+
+  const handleSatPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
+    updateSatFromPointer(e)
+  }
+
+  const handleSatPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current && (e.buttons > 0 || e.pointerType === "touch")) {
+      updateSatFromPointer(e)
+    }
+  }
+
+  const handleSatPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {}
+    flushEnd()
+  }
+
+  // 色相滑块指针交互
+  const updateHueFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!hueContainerRef.current) return
+    const rect = hueContainerRef.current.getBoundingClientRect()
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+    const h = (x / rect.width) * 360
+    applyHsvChange({ h, s: hsvRef.current.s, v: hsvRef.current.v })
+  }
+
+  const handleHuePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
+    updateHueFromPointer(e)
+  }
+
+  const handleHuePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current && (e.buttons > 0 || e.pointerType === "touch")) {
+      updateHueFromPointer(e)
+    }
+  }
+
+  const handleHuePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {}
+    flushEnd()
+  }
 
   // 处理输入框十六进制变更
   const handleHexChange = (val: string) => {
     setInputVal(val)
-    if (/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val)) {
+    if (/^#([0-9a-fA-F]{6})$/.test(val)) {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
       }
+      isDraggingRef.current = false
+      const parsed = hexToHsv(val, hsvRef.current.h)
+      hsvRef.current = parsed
+      setHsv(parsed)
       setColor(val)
       lastEmittedColorRef.current = val
       onChangeRef.current(val)
@@ -125,49 +286,20 @@ export function ColorPicker({
   }
 
   const handleHexBlur = () => {
-    if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inputVal)) {
+    if (!/^#([0-9a-fA-F]{6})$/.test(inputVal)) {
       setInputVal(color)
     }
   }
-
-  // HexColorPicker 拖拽与选色回调
-  // 本地 color 立即同步（保证与 react-colorful 内部同步，光标随鼠标 60/120fps 丝滑跟随，绝不卡顿、绝不回弹）
-  // HexColorPicker 拖拽与选色回调
-  // 本地 color 立即同步（保证与 react-colorful 内部同步，光标随鼠标 60/120fps 丝滑跟随，绝不卡顿、绝不回弹）
-  // 向父组件派发则使用 requestAnimationFrame 合并为一帧一次，避免高频 mousemove 导致父级全量重渲染过载
-  const handlePickerChange = React.useCallback((newColor: string) => {
-    setColor(newColor)
-    setInputVal(newColor)
-    lastEmittedColorRef.current = newColor
-
-    if (rafIdRef.current === null) {
-      rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null
-        onChangeRef.current(lastEmittedColorRef.current)
-      })
-    }
-  }, [])
-
-  // 拖拽或点击结束回调，立即冲刷最后一次颜色到父级
-  const handlePickerChangeEnd = React.useCallback((newColor?: string) => {
-    if (rafIdRef.current !== null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
-    }
-    const final = newColor || lastEmittedColorRef.current
-    if (final) {
-      setColor(final)
-      setInputVal(final)
-      lastEmittedColorRef.current = final
-      onChangeRef.current(final)
-    }
-  }, [])
 
   const handlePresetClick = (hex: string) => {
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
+    isDraggingRef.current = false
+    const parsed = hexToHsv(hex, hsvRef.current.h)
+    hsvRef.current = parsed
+    setHsv(parsed)
     setColor(hex)
     setInputVal(hex)
     lastEmittedColorRef.current = hex
@@ -183,7 +315,7 @@ export function ColorPicker({
           handlePresetClick(result.sRGBHex)
         }
       } catch {
-        // Ignored or cancelled by user
+        // 取消吸色
       }
     }
   }
@@ -216,30 +348,104 @@ export function ColorPicker({
         align="start"
         sideOffset={6}
         onOpenAutoFocus={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => {
-          // 如果点击或拖拽是在色盘区域内部（包含快速滑出色盘边缘的 mousemove），防止关闭中断拖拽
-          const target = e.target as HTMLElement | null
-          if (target?.closest?.('.react-colorful')) {
-            e.preventDefault()
-          }
-        }}
         className={cn(
           "z-50 w-64 p-3.5 rounded-3xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-2xl shadow-2xl space-y-3",
           className
         )}
       >
+        {/* 2D 饱和度与明度面板 */}
         <div
-          className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs select-none touch-none"
-          onPointerDown={(e) => e.stopPropagation()}
+          ref={satContainerRef}
+          role="slider"
+          aria-label="Color saturation and brightness"
+          tabIndex={0}
+          onPointerDown={handleSatPointerDown}
+          onPointerMove={handleSatPointerMove}
+          onPointerUp={handleSatPointerUp}
+          onPointerCancel={handleSatPointerUp}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 5 : 1
+            if (e.key === "ArrowLeft") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, s: Math.max(0, hsvRef.current.s - step) })
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, s: Math.min(100, hsvRef.current.s + step) })
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, v: Math.max(0, hsvRef.current.v - step) })
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, v: Math.min(100, hsvRef.current.v + step) })
+            }
+          }}
+          className="relative w-full h-[140px] rounded-2xl overflow-hidden border border-black/[0.08] dark:border-white/[0.12] shadow-inner select-none touch-none cursor-crosshair outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          style={{
+            backgroundColor: `hsl(${hsv.h}, 100%, 50%)`,
+          }}
         >
-          <HexColorPicker
-            color={color}
-            onChange={handlePickerChange}
-            onChangeEnd={handlePickerChangeEnd}
-            style={{ width: "100%", height: 164 }}
+          {/* 水平白色渐变 */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "linear-gradient(to right, #ffffff, transparent)",
+            }}
+          />
+          {/* 垂直黑色渐变 */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "linear-gradient(to top, #000000, transparent)",
+            }}
+          />
+          {/* 颜色光标指示圈 */}
+          <div
+            className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md pointer-events-none ring-1 ring-black/25"
+            style={{
+              left: `${Math.max(0, Math.min(100, hsv.s))}%`,
+              top: `${Math.max(0, Math.min(100, 100 - hsv.v))}%`,
+              backgroundColor: color,
+            }}
           />
         </div>
 
+        {/* 1D 色相彩虹滑轨 */}
+        <div
+          ref={hueContainerRef}
+          role="slider"
+          aria-label="Color hue"
+          tabIndex={0}
+          onPointerDown={handleHuePointerDown}
+          onPointerMove={handleHuePointerMove}
+          onPointerUp={handleHuePointerUp}
+          onPointerCancel={handleHuePointerUp}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 15 : 3
+            if (e.key === "ArrowLeft") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, h: Math.max(0, hsvRef.current.h - step) })
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault()
+              applyHsvChange({ ...hsvRef.current, h: Math.min(360, hsvRef.current.h + step) })
+            }
+          }}
+          className="relative w-full h-3.5 rounded-full border border-black/[0.08] dark:border-white/[0.12] shadow-inner select-none touch-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          style={{
+            background:
+              "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)",
+          }}
+        >
+          {/* 色相光标指示圈 */}
+          <div
+            className="absolute top-1/2 w-4.5 h-4.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md pointer-events-none ring-1 ring-black/25"
+            style={{
+              left: `${Math.max(0, Math.min(100, (hsv.h / 360) * 100))}%`,
+              backgroundColor: `hsl(${hsv.h}, 100%, 50%)`,
+            }}
+          />
+        </div>
+
+        {/* 颜色预览、十六进制输入与取色器 */}
         <div className="flex items-center gap-2">
           <div
             className="h-8 w-8 rounded-xl border border-black/10 dark:border-white/10 shadow-xs shrink-0"
@@ -269,6 +475,7 @@ export function ColorPicker({
           )}
         </div>
 
+        {/* 预设色板快捷选取 */}
         <div className="space-y-1.5 pt-1 border-t border-black/[0.05] dark:border-white/[0.06]">
           <div className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
             {t.common.colorPicker.presetsTitle}

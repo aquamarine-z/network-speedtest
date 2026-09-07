@@ -62,69 +62,47 @@ export function ColorPicker({
     [isControlled, controlledOnOpenChange]
   )
 
-  // pickerColor 是传给 HexColorPicker 的受控色彩，在拖拽期间保持不变，彻底杜绝 react-colorful 内部 Effect 1 触发死循环
-  const [pickerColor, setPickerColor] = React.useState(value || "#8b5cf6")
-  // localColor 与 inputVal 用于实时响应预览色块和十六进制输入框
-  const [localColor, setLocalColor] = React.useState(value || "#8b5cf6")
+  // 内部维护活跃颜色与输入框状态
+  const [color, setColor] = React.useState(value || "#8b5cf6")
   const [inputVal, setInputVal] = React.useState(value || "#8b5cf6")
 
-  const isDraggingRef = React.useRef(false)
   const rafIdRef = React.useRef<number | null>(null)
-  const pendingColorRef = React.useRef(value || "#8b5cf6")
   const lastEmittedColorRef = React.useRef(value || "#8b5cf6")
   const onChangeRef = React.useRef(onChange)
   onChangeRef.current = onChange
 
-  // 当外部传入的 value 发生非拖拽变更时（例如重置策略），同步更新内部各状态
-  React.useEffect(() => {
-    if (isDraggingRef.current) return
-    if (value && value.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
-      lastEmittedColorRef.current = value
-      pendingColorRef.current = value
-      setPickerColor(value)
-      setLocalColor(value)
-      setInputVal(value)
-    }
-  }, [value])
-
-  // 弹窗打开时，重置拖拽标记并同步初始颜色
+  // 弹窗打开时，初始化同步本地状态；若弹窗未打开，外部 value 变更时同步本地状态
   React.useEffect(() => {
     if (open) {
       const initial = value || "#8b5cf6"
-      isDraggingRef.current = false
-      lastEmittedColorRef.current = initial
-      pendingColorRef.current = initial
-      setPickerColor(initial)
-      setLocalColor(initial)
+      setColor(initial)
       setInputVal(initial)
+      lastEmittedColorRef.current = initial
+    }
+  }, [open])
+
+  React.useEffect(() => {
+    // 仅在弹窗未打开时响应外部传入的 value 变更（例如父组件重置默认值）
+    // 弹窗打开期间完全由用户本地交互主导，杜绝父子组件间 state-prop 互踩引发的死循环
+    if (!open && value) {
+      setColor(value)
+      setInputVal(value)
+      lastEmittedColorRef.current = value
     }
   }, [open, value])
 
-  // 全局 pointerup / pointercancel 兜底：防止用户在拾色器外松开鼠标导致 isDraggingRef 卡在 true
+  // 弹窗关闭时，如果还有未冲刷的 RAF，立即冲刷最后选中的颜色
   React.useEffect(() => {
-    const handleGlobalPointerUp = () => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false
-        if (rafIdRef.current !== null) {
-          cancelAnimationFrame(rafIdRef.current)
-          rafIdRef.current = null
-        }
-        const finalColor = pendingColorRef.current
-        setPickerColor(finalColor)
-        setLocalColor(finalColor)
-        setInputVal(finalColor)
-        if (finalColor.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
-          lastEmittedColorRef.current = finalColor
-          onChangeRef.current(finalColor)
-        }
-      }
+    if (!open && rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+      onChangeRef.current(lastEmittedColorRef.current)
     }
+  }, [open])
 
-    window.addEventListener("pointerup", handleGlobalPointerUp)
-    window.addEventListener("pointercancel", handleGlobalPointerUp)
+  // 组件卸载时清理 RAF
+  React.useEffect(() => {
     return () => {
-      window.removeEventListener("pointerup", handleGlobalPointerUp)
-      window.removeEventListener("pointercancel", handleGlobalPointerUp)
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
@@ -140,10 +118,7 @@ export function ColorPicker({
         cancelAnimationFrame(rafIdRef.current)
         rafIdRef.current = null
       }
-      isDraggingRef.current = false
-      setPickerColor(val)
-      setLocalColor(val)
-      pendingColorRef.current = val
+      setColor(val)
       lastEmittedColorRef.current = val
       onChangeRef.current(val)
     }
@@ -151,47 +126,37 @@ export function ColorPicker({
 
   const handleHexBlur = () => {
     if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inputVal)) {
-      setInputVal(localColor)
+      setInputVal(color)
     }
   }
 
-  // 拾色器在指针移动（拖拽中）时的回调
-  // 注意：此处绝不同步更新 pickerColor，避免 react-colorful 内部通过 Effect 1 引起级联渲染死循环
-  // 并且使用 requestAnimationFrame 将 state 更新与 parent onChange 限制在 60fps / 120fps 帧周期内
-  const handlePickerChange = (color: string) => {
-    isDraggingRef.current = true
-    pendingColorRef.current = color
+  // HexColorPicker 拖拽与选色回调
+  // 本地 color 立即同步（保证与 react-colorful 内部同步，光标随鼠标 60/120fps 丝滑跟随，绝不卡顿、绝不回弹）
+  // 向父组件派发则使用 requestAnimationFrame 合并为一帧一次，避免高频 mousemove 导致父级全量重渲染过载
+  const handlePickerChange = (newColor: string) => {
+    setColor(newColor)
+    setInputVal(newColor)
+    lastEmittedColorRef.current = newColor
 
     if (rafIdRef.current === null) {
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = null
-        const current = pendingColorRef.current
-        // 仅更新视觉预览色块与输入框，不更新 pickerColor
-        setLocalColor(current)
-        setInputVal(current)
-        lastEmittedColorRef.current = current
-        onChangeRef.current(current)
+        onChangeRef.current(lastEmittedColorRef.current)
       })
     }
   }
 
-  // 拾色器拖拽或点击结束
-  const handlePickerChangeEnd = (color?: string) => {
-    isDraggingRef.current = false
+  // 拖拽或点击结束回调，立即冲刷最后一次颜色到父级
+  const handlePickerChangeEnd = (newColor?: string) => {
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
-
-    const final = color || pendingColorRef.current || localColor
-    pendingColorRef.current = final
-    setPickerColor(final)
-    setLocalColor(final)
+    const final = newColor || lastEmittedColorRef.current || color
+    setColor(final)
     setInputVal(final)
-    if (final.toLowerCase() !== lastEmittedColorRef.current.toLowerCase()) {
-      lastEmittedColorRef.current = final
-      onChangeRef.current(final)
-    }
+    lastEmittedColorRef.current = final
+    onChangeRef.current(final)
   }
 
   const handlePresetClick = (hex: string) => {
@@ -199,10 +164,7 @@ export function ColorPicker({
       cancelAnimationFrame(rafIdRef.current)
       rafIdRef.current = null
     }
-    isDraggingRef.current = false
-    pendingColorRef.current = hex
-    setPickerColor(hex)
-    setLocalColor(hex)
+    setColor(hex)
     setInputVal(hex)
     lastEmittedColorRef.current = hex
     onChangeRef.current(hex)
@@ -240,7 +202,7 @@ export function ColorPicker({
           >
             <span
               className="h-5 w-5 rounded-full shadow-xs flex items-center justify-center border border-black/10 dark:border-white/15"
-              style={{ backgroundColor: open ? localColor : (value || "#8b5cf6") }}
+              style={{ backgroundColor: open ? color : (value || "#8b5cf6") }}
             />
           </button>
         )}
@@ -255,14 +217,9 @@ export function ColorPicker({
           className
         )}
       >
-        <div
-          className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs"
-          onPointerDown={() => {
-            isDraggingRef.current = true
-          }}
-        >
+        <div className="w-full overflow-hidden rounded-2xl border border-black/[0.08] dark:border-white/[0.12] shadow-xs">
           <HexColorPicker
-            color={pickerColor}
+            color={color}
             onChange={handlePickerChange}
             onChangeEnd={handlePickerChangeEnd}
             style={{ width: "100%", height: 164 }}
@@ -272,7 +229,7 @@ export function ColorPicker({
         <div className="flex items-center gap-2">
           <div
             className="h-8 w-8 rounded-xl border border-black/10 dark:border-white/10 shadow-xs shrink-0"
-            style={{ backgroundColor: localColor }}
+            style={{ backgroundColor: color }}
           />
           <div className="relative flex-1">
             <Input
@@ -304,7 +261,7 @@ export function ColorPicker({
           </div>
           <div className="grid grid-cols-8 gap-1.5 w-full">
             {QUICK_PRESETS.map((hex) => {
-              const isSelected = localColor.toLowerCase() === hex.toLowerCase()
+              const isSelected = color.toLowerCase() === hex.toLowerCase()
               return (
                 <button
                   key={hex}

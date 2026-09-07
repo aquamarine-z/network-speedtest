@@ -157,20 +157,19 @@ export function calculateNextRunTimestamp(
   const intervalMs = Math.max(intervalSeconds, 5) * 1000
 
   if (scheduleMode === 'aligned') {
-    // 整点/自然时钟对齐模式
-    const currentSlot = Math.floor(now / intervalMs)
-    let nextSlotTime = (currentSlot + 1) * intervalMs
-    if (nextSlotTime - now < 1000 && lastRunTimestamp > now - 2500) {
-      nextSlotTime += intervalMs
+    // 整点/自然时钟对齐模式 (如 30 分钟: 00:00, 00:30, 01:00...)
+    const currentSlotTime = Math.floor(now / intervalMs) * intervalMs
+    // 检查当前整点槽位是否已经成功测速过（留出 3 秒容错缓冲区）
+    if (lastRunTimestamp >= currentSlotTime - 3000) {
+      // 当前槽位已经测过，目标为下一个自然整点时刻
+      return currentSlotTime + intervalMs
+    } else {
+      // 当前槽位尚未测速，到期时间即为当前槽位起始时刻（diff <= 0，立即触发）
+      return currentSlotTime
     }
-    return nextSlotTime
   } else {
-    // 滚动间隔模式：自上次运行起算
-    const nextTime = lastRunTimestamp + intervalMs
-    if (nextTime <= now) {
-      return now + intervalMs
-    }
-    return nextTime
+    // 滚动间隔模式：自上次成功运行时间起算整整一个周期
+    return lastRunTimestamp + intervalMs
   }
 }
 

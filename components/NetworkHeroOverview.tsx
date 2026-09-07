@@ -16,6 +16,7 @@ export function NetworkHeroOverview() {
     fetchLatest,
     latestResult,
     qualityTiers,
+    error,
   } = useNetworkStore()
 
   const [remainingSec, setRemainingSec] = React.useState<number>(0)
@@ -71,8 +72,19 @@ export function NetworkHeroOverview() {
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [fetchLatest])
+
+    // 前台定时心跳同步（每 20 秒检查一次后端常驻守护线程产出的新数据）
+    const syncTimer = setInterval(() => {
+      if (document.visibilityState === "visible" && !isMeasuring) {
+        void fetchLatest()
+      }
+    }, 20000)
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+      clearInterval(syncTimer)
+    }
+  }, [fetchLatest, isMeasuring])
 
   const handleCopyTarget = () => {
     if (!targetNode) return
@@ -161,6 +173,15 @@ export function NetworkHeroOverview() {
               </>
             )}
           </div>
+
+          {error && !isMeasuring && (
+            <div
+              className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 px-2.5 py-1 text-[11px] border border-rose-200 dark:border-rose-900/50 max-w-[240px]"
+              title={error}
+            >
+              <span className="truncate">{error}</span>
+            </div>
+          )}
 
           <div className="hidden md:inline-flex items-center gap-1 rounded-full bg-neutral-100/60 dark:bg-neutral-800/50 px-2.5 py-1 text-[11px] text-neutral-500 dark:text-neutral-400 border border-black/[0.03] dark:border-white/[0.04]">
             <Clock className="h-3 w-3 text-neutral-400" />

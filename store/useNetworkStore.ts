@@ -97,13 +97,23 @@ export const useNetworkStore = create<NetworkStore>((set, get) => ({
       }
 
       const data = await res.json()
+      if (data.success === false && data.error) {
+        set({
+          isMeasuring: false,
+          error: data.error,
+          schedulerConfig: data.config || get().schedulerConfig,
+        })
+        return
+      }
+
       set({
-        latestResult: data.latest,
-        targetNode: data.target || data.latest.target,
+        latestResult: data.latest || get().latestResult,
+        targetNode: data.target || data.latest?.target || get().targetNode,
         historyList: data.history || [],
         schedulerConfig: data.config || get().schedulerConfig,
         qualityTiers: data.qualityTiers || get().qualityTiers,
         isMeasuring: false,
+        error: null,
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t.common.measurementRequestError

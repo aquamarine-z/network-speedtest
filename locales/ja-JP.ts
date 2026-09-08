@@ -179,6 +179,10 @@ export const jaJP: typeof zhCN = {
     periodAvg: "平均遅延",
     lossAvg: "平均ロス",
     timeSlots: "枠",
+    hideLatency: "クリックして遅延折れ線を非表示",
+    showLatency: "クリックして遅延折れ線を表示",
+    hideLoss: "クリックしてロス率折れ線を非表示",
+    showLoss: "クリックしてロス率折れ線を表示",
   },
   regionHistory: {
     historyArchive: "巡回履歴アーカイブ",
@@ -249,6 +253,10 @@ export const jaJP: typeof zhCN = {
       thirtyDaysAvg: "30日平均",
       todayOnly: "直近24時間",
     },
+    hideLatency: "クリックして遅延折れ線を非表示",
+    showLatency: "クリックして遅延折れ線を表示",
+    hideLoss: "クリックしてロス率折れ線を非表示",
+    showLoss: "クリックしてロス率折れ線を表示",
   },
   carrier: {
     telecom: "中国電信",

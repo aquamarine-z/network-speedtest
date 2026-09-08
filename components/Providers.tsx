@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 import NiceModal from "@ebay/nice-modal-react"
 import { LocaleKey, LocaleMessages, defaultLocale, getMessages, setGlobalLocale } from "@/locales"
 
@@ -98,11 +99,42 @@ export function Providers({ children }: { children: React.ReactNode }) {
     setTheme(theme === "dark" ? "light" : "dark")
   }, [theme, setTheme])
 
+  const pathname = usePathname()
+
+  // 监听语言及页面路由切换，动态更新浏览器标签页标题与 html lang / meta description
+  React.useEffect(() => {
+    if (typeof document === "undefined") return
+    const msgs = getMessages(locale)
+    const isAdmin = pathname?.startsWith("/admin")
+    const title = isAdmin ? msgs.admin?.pageTitle : msgs.meta?.title
+    if (title) {
+      document.title = title
+    }
+    const description = isAdmin ? msgs.admin?.overviewDesc : msgs.meta?.description
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc && description) {
+      metaDesc.setAttribute("content", description)
+    }
+    document.documentElement.lang = locale
+  }, [locale, pathname])
+
   const setLocale = React.useCallback((newLocale: LocaleKey) => {
     setLocaleState(newLocale)
     setGlobalLocale(newLocale)
-    localStorage.setItem("app-locale", newLocale)
-    document.documentElement.lang = newLocale
+    try {
+      localStorage.setItem("app-locale", newLocale)
+    } catch {
+      // ignore
+    }
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = newLocale
+      const msgs = getMessages(newLocale)
+      const isAdmin = typeof window !== "undefined" && window.location.pathname.startsWith("/admin")
+      const title = isAdmin ? msgs.admin?.pageTitle : msgs.meta?.title
+      if (title) {
+        document.title = title
+      }
+    }
   }, [])
 
   const currentMessages = React.useMemo(() => getMessages(locale), [locale])

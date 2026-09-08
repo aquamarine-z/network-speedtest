@@ -177,6 +177,10 @@ export const zhCN = {
     periodAvg: "时延均值",
     lossAvg: "平均丢包",
     timeSlots: "个时段",
+    hideLatency: "点击隐藏时延折线",
+    showLatency: "点击显示时延折线",
+    hideLoss: "点击隐藏丢包率折线",
+    showLoss: "点击显示丢包率折线",
   },
   regionHistory: {
     historyArchive: "历史巡检归档",
@@ -247,6 +251,10 @@ export const zhCN = {
       thirtyDaysAvg: "30日均值",
       todayOnly: "近24小时",
     },
+    hideLatency: "点击隐藏时延折线",
+    showLatency: "点击显示时延折线",
+    hideLoss: "点击隐藏丢包率折线",
+    showLoss: "点击显示丢包率折线",
   },
   carrier: {
     telecom: "中国电信",

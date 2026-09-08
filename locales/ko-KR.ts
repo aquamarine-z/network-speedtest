@@ -179,6 +179,10 @@ export const koKR: typeof zhCN = {
     periodAvg: "평균 지연",
     lossAvg: "평균 손실",
     timeSlots: "개 구간",
+    hideLatency: "클릭하여 지연 꺾은선 숨기기",
+    showLatency: "클릭하여 지연 꺾은선 표시",
+    hideLoss: "클릭하여 손실률 꺾은선 숨기기",
+    showLoss: "클릭하여 손실률 꺾은선 표시",
   },
   regionHistory: {
     historyArchive: "순회 이력 아카이브",
@@ -249,6 +253,10 @@ export const koKR: typeof zhCN = {
       thirtyDaysAvg: "30일 평균",
       todayOnly: "최근 24시간",
     },
+    hideLatency: "클릭하여 지연 꺾은선 숨기기",
+    showLatency: "클릭하여 지연 꺾은선 표시",
+    hideLoss: "클릭하여 손실률 꺾은선 숨기기",
+    showLoss: "클릭하여 손실률 꺾은선 표시",
   },
   carrier: {
     telecom: "차이나텔레콤",

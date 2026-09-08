@@ -179,6 +179,10 @@ export const enUS: typeof zhCN = {
     periodAvg: "Avg",
     lossAvg: "Loss",
     timeSlots: "slots",
+    hideLatency: "Click to hide latency line",
+    showLatency: "Click to show latency line",
+    hideLoss: "Click to hide loss rate line",
+    showLoss: "Click to show loss rate line",
   },
   regionHistory: {
     historyArchive: "Archive",
@@ -249,6 +253,10 @@ export const enUS: typeof zhCN = {
       thirtyDaysAvg: "30d Avg",
       todayOnly: "Last 24h",
     },
+    hideLatency: "Click to hide latency line",
+    showLatency: "Click to show latency line",
+    hideLoss: "Click to hide packet loss line",
+    showLoss: "Click to show packet loss line",
   },
   carrier: {
     telecom: "Telecom",

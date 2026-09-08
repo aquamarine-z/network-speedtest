@@ -34,6 +34,20 @@ export function LatencyTrendChart() {
   const chartRef = React.useRef<HTMLDivElement>(null)
   const chartInstanceRef = React.useRef<echartsType.ECharts | null>(null)
   const [isDarkMode, setIsDarkMode] = React.useState(false)
+  const [visibleSeries, setVisibleSeries] = React.useState<{ latency: boolean; loss: boolean }>({
+    latency: true,
+    loss: true,
+  })
+
+  const toggleSeries = React.useCallback((key: "latency" | "loss") => {
+    setVisibleSeries((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }, [])
+
+  const latencySeriesName = t.trend.compositeSeries
+  const lossSeriesName = t.trend.lossSeries
 
   // 监听深色模式变化
   React.useEffect(() => {
@@ -205,11 +219,22 @@ export function LatencyTrendChart() {
 
         const option: echartsType.EChartsOption = {
           animationDuration: 400,
+          legend: {
+            show: false,
+            selected: {
+              [latencySeriesName]: visibleSeries.latency,
+              [lossSeriesName]: visibleSeries.loss,
+            },
+          },
           grid: {
             top: isMobileView ? 40 : 44,
-            right: isMobileView ? 38 : 48,
+            right: !visibleSeries.loss
+              ? (isMobileView ? 16 : 20)
+              : (isMobileView ? 38 : 48),
             bottom: isMobileView ? 24 : 28,
-            left: isMobileView ? 40 : 48,
+            left: !visibleSeries.latency && visibleSeries.loss
+              ? (isMobileView ? 16 : 20)
+              : (isMobileView ? 40 : 48),
             containLabel: false,
           },
           tooltip: {
@@ -298,13 +323,13 @@ export function LatencyTrendChart() {
                   </div>
 
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px;">
-                    <div>
+                    <div style="${!visibleSeries.latency ? 'opacity: 0.35;' : ''}">
                       <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase;">${t.trend.nationalAvg}</div>
                       <div style="font-size: 18px; font-weight: 700; font-family: monospace; color: ${primaryColor}; line-height: 1.1;">
                         ${item.overallAvgLatency.toFixed(1)} <span style="font-size: 11px; font-weight: 400;">ms</span>
                       </div>
                     </div>
-                    <div>${lossBadge}</div>
+                    <div style="${!visibleSeries.loss ? 'opacity: 0.35;' : ''}">${lossBadge}</div>
                   </div>
 
                   <!-- 扁平化融入上一层背景，去二级嵌套卡片 -->
@@ -387,7 +412,8 @@ export function LatencyTrendChart() {
           yAxis: [
             {
               type: "value",
-              name: t.trend.latencyAxis,
+              show: visibleSeries.latency || !visibleSeries.loss,
+              name: visibleSeries.latency ? t.trend.latencyAxis : "",
               nameTextStyle: {
                 color: textColor,
                 fontSize: 10,
@@ -417,7 +443,8 @@ export function LatencyTrendChart() {
             },
             {
               type: "value",
-              name: t.trend.lossAxis,
+              show: visibleSeries.loss,
+              name: visibleSeries.loss ? t.trend.lossAxis : "",
               nameTextStyle: {
                 color: lossColor,
                 fontSize: 10,
@@ -444,7 +471,7 @@ export function LatencyTrendChart() {
           ],
           series: [
             {
-              name: t.trend.compositeSeries,
+              name: latencySeriesName,
               type: "line",
               yAxisIndex: 0,
               smooth: 0.35,
@@ -482,7 +509,7 @@ export function LatencyTrendChart() {
               },
             },
             {
-              name: t.trend.lossSeries,
+              name: lossSeriesName,
               type: "line",
               yAxisIndex: 1,
               smooth: 0.35,
@@ -567,7 +594,7 @@ export function LatencyTrendChart() {
         chartInstanceRef.current = null
       }
     }
-  }, [aggregatedData, isDarkMode, locale])
+  }, [aggregatedData, isDarkMode, locale, visibleSeries, latencySeriesName, lossSeriesName])
 
   if (aggregatedData.length === 0) {
     return null
@@ -622,15 +649,64 @@ export function LatencyTrendChart() {
       </div>
 
       <div className="mt-2.5 sm:mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <span className="inline-flex items-center gap-1.5 font-medium">
-            <span className="h-2 w-2 rounded-full bg-[#0066cc] dark:bg-[#2997ff]" />
-            <span className="text-neutral-700 dark:text-neutral-300">{t.trend.compositeSeries}</span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 font-medium">
-            <span className="h-2 w-2 rounded-full bg-[#f43f5e]" />
-            <span className="text-neutral-700 dark:text-neutral-300">{t.trend.lossSeries}</span>
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => toggleSeries("latency")}
+            className={`inline-flex items-center gap-1.5 font-medium cursor-pointer transition-all duration-150 select-none py-0.5 px-2 -mx-1 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800/70 active:scale-95 ${
+              visibleSeries.latency
+                ? "opacity-100"
+                : "opacity-40 hover:opacity-75 text-neutral-400 dark:text-neutral-500"
+            }`}
+            title={visibleSeries.latency ? t.trend.hideLatency : t.trend.showLatency}
+            aria-pressed={visibleSeries.latency}
+          >
+            <span
+              className={`h-2 w-2 rounded-full transition-colors ${
+                visibleSeries.latency
+                  ? "bg-[#0066cc] dark:bg-[#2997ff]"
+                  : "bg-neutral-300 dark:bg-neutral-600 ring-1 ring-inset ring-neutral-400/40 dark:ring-neutral-500/40"
+              }`}
+            />
+            <span
+              className={
+                visibleSeries.latency
+                  ? "text-neutral-700 dark:text-neutral-300"
+                  : "text-neutral-400 dark:text-neutral-500 line-through decoration-neutral-400/50"
+              }
+            >
+              {latencySeriesName}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => toggleSeries("loss")}
+            className={`inline-flex items-center gap-1.5 font-medium cursor-pointer transition-all duration-150 select-none py-0.5 px-2 -mx-1 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-800/70 active:scale-95 ${
+              visibleSeries.loss
+                ? "opacity-100"
+                : "opacity-40 hover:opacity-75 text-neutral-400 dark:text-neutral-500"
+            }`}
+            title={visibleSeries.loss ? t.trend.hideLoss : t.trend.showLoss}
+            aria-pressed={visibleSeries.loss}
+          >
+            <span
+              className={`h-2 w-2 rounded-full transition-colors ${
+                visibleSeries.loss
+                  ? "bg-[#f43f5e]"
+                  : "bg-neutral-300 dark:bg-neutral-600 ring-1 ring-inset ring-neutral-400/40 dark:ring-neutral-500/40"
+              }`}
+            />
+            <span
+              className={
+                visibleSeries.loss
+                  ? "text-neutral-700 dark:text-neutral-300"
+                  : "text-neutral-400 dark:text-neutral-500 line-through decoration-neutral-400/50"
+              }
+            >
+              {lossSeriesName}
+            </span>
+          </button>
         </div>
 
         <span className="inline-flex items-center rounded-md bg-neutral-100 dark:bg-neutral-800/80 px-2 py-0.5 text-[10px] font-mono text-neutral-500 dark:text-neutral-400">

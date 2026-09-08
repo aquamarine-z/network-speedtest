@@ -153,6 +153,21 @@ export function RegionLatencyChart({
   const [internalTimeRange, setInternalTimeRange] = React.useState<ChartTimeRange>("today")
   const timeRange = controlledTimeRange ?? internalTimeRange
 
+  const [visibleSeries, setVisibleSeries] = React.useState<{ latency: boolean; loss: boolean }>({
+    latency: true,
+    loss: true,
+  })
+
+  const toggleSeries = React.useCallback((key: "latency" | "loss") => {
+    setVisibleSeries((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }, [])
+
+  const latencySeriesName = t.regionHistory.chartSeriesLabel || "时延"
+  const lossSeriesName = t.regionHistory.chartLossLabel || "丢包率"
+
   const handleRangeChange = (r: ChartTimeRange) => {
     if (onTimeRangeChange) {
       onTimeRangeChange(r)
@@ -289,11 +304,22 @@ export function RegionLatencyChart({
 
         const option: echartsType.EChartsOption = {
           animationDuration: 300,
+          legend: {
+            show: false,
+            selected: {
+              [latencySeriesName]: visibleSeries.latency,
+              [lossSeriesName]: visibleSeries.loss,
+            },
+          },
           grid: {
             top: 24,
-            right: isMobileView ? 36 : 42,
+            right: !visibleSeries.loss
+              ? (isMobileView ? 14 : 16)
+              : (isMobileView ? 36 : 42),
             bottom: 24,
-            left: isMobileView ? 38 : 42,
+            left: !visibleSeries.latency && visibleSeries.loss
+              ? (isMobileView ? 14 : 16)
+              : (isMobileView ? 38 : 42),
             containLabel: false,
           },
           tooltip: {
@@ -378,13 +404,13 @@ export function RegionLatencyChart({
                       </span>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px;">
-                      <div>
+                      <div style="${!visibleSeries.latency ? 'opacity: 0.35;' : ''}">
                         <div style="font-size: 10px; opacity: 0.6;">${t.regionHistory.dailyAvgLatency}</div>
                         <div style="font-size: 16px; font-weight: 700; font-family: monospace; color: ${primaryColor}; line-height: 1.1;">
                           ${item.avgLatency.toFixed(1)} <span style="font-size: 10px; font-weight: 400;">ms</span>
                         </div>
                       </div>
-                      <div>${lossBadge}</div>
+                      <div style="${!visibleSeries.loss ? 'opacity: 0.35;' : ''}">${lossBadge}</div>
                     </div>
                     <div style="font-size: 10px; opacity: 0.65; display: flex; justify-content: space-between; margin-top: 3px;">
                       <span>${t.regionHistory.rangeText}: ${item.minLatency} ~ ${item.maxLatency} ms</span>
@@ -429,10 +455,12 @@ export function RegionLatencyChart({
                     </span>
                   </div>
                   <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
-                    <div style="font-size: 15px; font-weight: 700; font-family: monospace; color: ${primaryColor}; line-height: 1.1;">
-                      ${run.avgLatency.toFixed(1)} <span style="font-size: 10px; font-weight: 400;">ms</span>
+                    <div style="${!visibleSeries.latency ? 'opacity: 0.35;' : ''}">
+                      <div style="font-size: 15px; font-weight: 700; font-family: monospace; color: ${primaryColor}; line-height: 1.1;">
+                        ${run.avgLatency.toFixed(1)} <span style="font-size: 10px; font-weight: 400;">ms</span>
+                      </div>
                     </div>
-                    <div>${lossBadge}</div>
+                    <div style="${!visibleSeries.loss ? 'opacity: 0.35;' : ''}">${lossBadge}</div>
                   </div>
                   <div style="font-size: 10px; display: flex; flex-direction: column; gap: 2px; background: ${
                     isDarkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)"
@@ -478,6 +506,7 @@ export function RegionLatencyChart({
           yAxis: [
             {
               type: "value",
+              show: visibleSeries.latency || !visibleSeries.loss,
               axisLine: { show: false },
               axisTick: { show: false },
               splitLine: {
@@ -495,6 +524,7 @@ export function RegionLatencyChart({
             },
             {
               type: "value",
+              show: visibleSeries.loss,
               min: 0,
               max: (value: { max: number }) => {
                 if (!value || value.max <= 0) return 10
@@ -515,7 +545,7 @@ export function RegionLatencyChart({
           ],
           series: [
             {
-              name: t.regionHistory.chartSeriesLabel || "时延",
+              name: latencySeriesName,
               type: "line",
               yAxisIndex: 0,
               smooth: 0.35,
@@ -555,7 +585,7 @@ export function RegionLatencyChart({
               data: currentDataConfig.yData,
             },
             {
-              name: t.regionHistory.chartLossLabel || "丢包率",
+              name: lossSeriesName,
               type: "line",
               yAxisIndex: 1,
               smooth: 0.35,
@@ -638,7 +668,7 @@ export function RegionLatencyChart({
       chartInstanceRef.current?.dispose()
       chartInstanceRef.current = null
     }
-  }, [currentDataConfig, isDarkMode, timeRange, last7Daily, last30Daily, sparseTodayRuns, locale])
+  }, [currentDataConfig, isDarkMode, timeRange, last7Daily, last30Daily, sparseTodayRuns, locale, visibleSeries, latencySeriesName, lossSeriesName])
 
   if (currentDataConfig.yData.length === 0) {
     return (
@@ -650,30 +680,12 @@ export function RegionLatencyChart({
 
   return (
     <div className="relative rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-3 sm:p-3.5 shadow-xs transition-all overflow-hidden">
-      <div className="flex items-center justify-between gap-2 mb-2 px-0.5 whitespace-nowrap overflow-hidden">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#0066cc] dark:bg-[#2997ff] shrink-0" />
-            <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 whitespace-nowrap">
-              {t.regionHistory.trendTitle}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5 text-[10px] text-neutral-500 dark:text-neutral-400">
-            <span className="inline-flex items-center gap-1 font-medium">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#0066cc] dark:bg-[#2997ff]" />
-              <span className="text-neutral-600 dark:text-neutral-300">{t.regionHistory.chartSeriesLabel || "时延"}</span>
-            </span>
-            <span className="inline-flex items-center gap-1 font-medium">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#f43f5e]" />
-              <span className="text-neutral-600 dark:text-neutral-300">{t.regionHistory.chartLossLabel || "丢包率"}</span>
-            </span>
-          </div>
-
-          <span className="text-[10px] text-neutral-400 font-mono hidden md:inline whitespace-nowrap">
-            ({timeRange === "today"
-              ? (isYesterday ? (timeWindowLabel || t.regionHistory.yesterday) : t.regionHistory.timeRanges.todayOnly)
-              : t.regionHistory.daysCount.replace("{count}", String(currentDataConfig.pointCount))})
+      {/* 顶部栏：标题与时间维度切换 */}
+      <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="h-2 w-2 rounded-full bg-[#0066cc] dark:bg-[#2997ff] shrink-0" />
+          <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+            {t.regionHistory.trendTitle}
           </span>
         </div>
 
@@ -712,6 +724,75 @@ export function RegionLatencyChart({
             {t.regionHistory.timeRanges.todayOnly}
           </button>
         </div>
+      </div>
+
+      {/* 次级操作栏：图例切换与样本范围说明（独立成行，避免移动端横向空间拥挤） */}
+      <div className="flex items-center justify-between gap-2 mb-1.5 px-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={() => toggleSeries("latency")}
+            className={`inline-flex items-center gap-1 font-medium cursor-pointer transition-all duration-150 select-none py-0.5 px-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800/70 active:scale-95 ${
+              visibleSeries.latency
+                ? "opacity-100"
+                : "opacity-40 hover:opacity-75 text-neutral-400 dark:text-neutral-500"
+            }`}
+            title={visibleSeries.latency ? t.regionHistory.hideLatency : t.regionHistory.showLatency}
+            aria-pressed={visibleSeries.latency}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                visibleSeries.latency
+                  ? "bg-[#0066cc] dark:bg-[#2997ff]"
+                  : "bg-neutral-300 dark:bg-neutral-600 ring-1 ring-inset ring-neutral-400/40 dark:ring-neutral-500/40"
+              }`}
+            />
+            <span
+              className={
+                visibleSeries.latency
+                  ? "text-neutral-600 dark:text-neutral-300"
+                  : "text-neutral-400 dark:text-neutral-500 line-through decoration-neutral-400/50"
+              }
+            >
+              {latencySeriesName}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => toggleSeries("loss")}
+            className={`inline-flex items-center gap-1 font-medium cursor-pointer transition-all duration-150 select-none py-0.5 px-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800/70 active:scale-95 ${
+              visibleSeries.loss
+                ? "opacity-100"
+                : "opacity-40 hover:opacity-75 text-neutral-400 dark:text-neutral-500"
+            }`}
+            title={visibleSeries.loss ? t.regionHistory.hideLoss : t.regionHistory.showLoss}
+            aria-pressed={visibleSeries.loss}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                visibleSeries.loss
+                  ? "bg-[#f43f5e]"
+                  : "bg-neutral-300 dark:bg-neutral-600 ring-1 ring-inset ring-neutral-400/40 dark:ring-neutral-500/40"
+              }`}
+            />
+            <span
+              className={
+                visibleSeries.loss
+                  ? "text-neutral-600 dark:text-neutral-300"
+                  : "text-neutral-400 dark:text-neutral-500 line-through decoration-neutral-400/50"
+              }
+            >
+              {lossSeriesName}
+            </span>
+          </button>
+        </div>
+
+        <span className="text-[10px] text-neutral-400 font-mono whitespace-nowrap">
+          ({timeRange === "today"
+            ? (isYesterday ? (timeWindowLabel || t.regionHistory.yesterday) : t.regionHistory.timeRanges.todayOnly)
+            : t.regionHistory.daysCount.replace("{count}", String(currentDataConfig.pointCount))})
+        </span>
       </div>
 
       <div ref={chartRef} className="w-full h-40 sm:h-44" />
